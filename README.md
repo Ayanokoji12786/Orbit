@@ -1,56 +1,68 @@
-# Welcome to your Expo app 👋
+# Orbit
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A premium, AI-first mobile communication app. Built with Expo + TypeScript + Expo Router.
 
-## Get started
+## Status: Phase 1
 
-1. Install dependencies
+This is the first build pass: project scaffold, full design system, complete navigation shell, and
+polished Splash/Onboarding/Auth/Home screens. Auth is wired to real Supabase code (Email OTP,
+Magic Link, Apple Sign-In, Google Sign-In) but needs your own credentials to actually authenticate.
+Meetings/Contacts/Settings/Recordings/Notifications run on local mock data with real, on-brand UI —
+not dead ends, just not backed by a live database yet. The active meeting screen is a visual preview
+of the calling UI; it does not carry real video until LiveKit is wired in Phase 2.
 
-   ```bash
-   npm install
-   ```
+See `.env.example` for every credential the app can use and what breaks without it.
 
-2. Start the app
+## Running it
 
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+This app uses native modules (Apple Sign-In, and LiveKit/ReplayKit/MediaProjection in later phases),
+so **it cannot run in Expo Go**. Use a development build:
 
 ```bash
-npm run reset-project
+npm install
+npx expo prebuild
+npx expo run:ios     # or: npx expo run:android
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Day-to-day, once the dev build is installed on a simulator/device:
 
-### Other setup steps
+```bash
+npx expo start
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Missing on this machine and needed before a native build will fully succeed:
 
-## Learn more
+```bash
+brew install watchman cocoapods
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Environment
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+cp .env.example .env
+```
 
-## Join the community
+Fill in what you have — the app boots and every screen is reachable with an empty `.env`. Auth
+buttons and Sign Out are disabled with an inline explanation until `EXPO_PUBLIC_SUPABASE_URL` /
+`EXPO_PUBLIC_SUPABASE_ANON_KEY` are set.
 
-Join our community of developers creating universal apps.
+## Project structure
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```
+src/
+  app/                 Expo Router routes (thin — compose feature screens)
+  design-system/       color/type/spacing/motion tokens, useAppTheme()
+  components/ui/       design-system-driven primitives (Button, GlassCard, Avatar, ...)
+  components/navigation/  tab bar, screen header, stub-screen helpers
+  features/<name>/     screen-specific components, api calls, hooks — one folder per feature
+  stores/              zustand stores (auth, theme, app state)
+  lib/                 external clients (supabase)
+  types/                shared domain types
+```
+
+## Roadmap
+
+- **Phase 2** — Supabase schema wired live, LiveKit video calling, real meeting room.
+- **Phase 3** — Chat, whiteboard, file sharing, push notifications, scheduling.
+- **Phase 4** — AI summaries, live captions/translation, AI assistant, transcript search.
+- **Phase 5** — Performance, security hardening, accessibility pass, testing, store submission.
