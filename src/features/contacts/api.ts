@@ -1,11 +1,26 @@
 import { useEffect, useState } from 'react';
-import { collection, doc, getDoc, getDocs, onSnapshot, query, setDoc, where } from '@react-native-firebase/firestore';
 
-import { firestore } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import type { Contact } from '@/types/domain';
 
 export type AddContactResult = 'added' | 'not-found' | 'self' | 'exists';
+
+type ContactRow = {
+  contact_id: string;
+  is_favorite: boolean;
+  users: { display_name: string | null; avatar_url: string | null; status: Contact['status'] | null } | null;
+};
+
+function mapContact(row: ContactRow): Contact {
+  return {
+    id: row.contact_id,
+    name: row.users?.display_name ?? 'Orbit User',
+    avatarUrl: row.users?.avatar_url ?? null,
+    status: row.users?.status ?? 'offline',
+    isFavorite: row.is_favorite,
+  };
+}
 
 /** This user's contacts (their own rolodex — adding someone doesn't require their consent). */
 export function useContacts(): { contacts: Contact[]; loading: boolean } {
@@ -14,41 +29,34 @@ export function useContacts(): { contacts: Contact[]; loading: boolean } {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!firestore || !uid) {
+    if (!supabase || !uid) {
       setContacts([]);
       setLoading(false);
       return;
     }
+    const client = supabase;
     setLoading(true);
 
-    const itemsRef = collection(firestore, 'contacts', uid, 'items');
-    const unsubscribe = onSnapshot(itemsRef, async (snap) => {
-      const items = snap.docs.map((d) => ({ contactUid: d.id, isFavorite: Boolean(d.data().isFavorite) }));
-      if (items.length === 0) {
-        setContacts([]);
-        setLoading(false);
-        return;
-      }
+    const load = () => {
+      client
+        .from('contacts')
+        .select('contact_id, is_favorite, users:contact_id(display_name, avatar_url, status)')
+        .eq('owner_id', uid)
+        .then(({ data }) => {
+          setContacts(((data as ContactRow[] | null) ?? []).map(mapContact));
+          setLoading(false);
+        });
+    };
 
-      const profiles = await Promise.all(
-        items.map(async (item) => {
-          const userSnap = await getDoc(doc(firestore!, 'users', item.contactUid));
-          const data = userSnap.data();
-          const contact: Contact = {
-            id: item.contactUid,
-            name: (data?.displayName as string | undefined) ?? 'Orbit User',
-            avatarUrl: (data?.avatarUrl as string | null | undefined) ?? null,
-            status: (data?.status as Contact['status'] | undefined) ?? 'offline',
-            isFavorite: item.isFavorite,
-          };
-          return contact;
-        }),
-      );
-      setContacts(profiles);
-      setLoading(false);
-    });
+    load();
+    const channel = client
+      .channel(`contacts:${uid}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contacts', filter: `owner_id=eq.${uid}` }, load)
+      .subscribe();
 
-    return unsubscribe;
+    return () => {
+      client.removeChannel(channel);
+    };
   }, [uid]);
 
   return { contacts, loading };
@@ -56,28 +64,26 @@ export function useContacts(): { contacts: Contact[]; loading: boolean } {
 
 /** Looks a user up by email and adds them to the caller's contacts. */
 export async function addContactByEmail(email: string): Promise<AddContactResult> {
-  if (!firestore) throw new Error('Connect a Firebase project to add contacts.');
+  if (!supabase) throw new Error('Connect a Supabase project to add contacts.');
   const uid = useAuthStore.getState().uid;
   if (!uid) throw new Error('Sign in required.');
 
   const normalized = email.trim().toLowerCase();
-  const usersSnap = await getDocs(query(collection(firestore, 'users'), where('email', '==', normalized)));
-  if (usersSnap.empty) return 'not-found';
+  const { data: user } = await supabase.from('users').select('id').eq('email', normalized).maybeSingle();
+  if (!user) return 'not-found';
+  if (user.id === uid) return 'self';
 
-  const contactUid = usersSnap.docs[0].id;
-  if (contactUid === uid) return 'self';
-
-  const itemRef = doc(firestore, 'contacts', uid, 'items', contactUid);
-  const existing = await getDoc(itemRef);
-  if (existing.exists()) return 'exists';
-
-  await setDoc(itemRef, { isFavorite: false, addedAt: new Date() });
+  const { error } = await supabase.from('contacts').insert({ owner_id: uid, contact_id: user.id, is_favorite: false });
+  if (error) {
+    if (error.code === '23505') return 'exists'; // unique_violation on the (owner_id, contact_id) PK
+    throw error;
+  }
   return 'added';
 }
 
 export async function setContactFavorite(contactUid: string, isFavorite: boolean) {
-  if (!firestore) return;
+  if (!supabase) return;
   const uid = useAuthStore.getState().uid;
   if (!uid) return;
-  await setDoc(doc(firestore, 'contacts', uid, 'items', contactUid), { isFavorite }, { merge: true });
+  await supabase.from('contacts').update({ is_favorite: isFavorite }).eq('owner_id', uid).eq('contact_id', contactUid);
 }

@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, Button, Divider, GradientBackground, IconButton } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
-import { sendSignInLink, signInWithApple } from '@/features/auth/api';
+import { sendSignInCode, signInWithApple } from '@/features/auth/api';
 import { useGoogleSignIn } from '@/features/auth/useGoogleSignIn';
 
 export default function SignIn() {
@@ -25,7 +25,7 @@ export default function SignIn() {
     setError(null);
     setSending(true);
     try {
-      await sendSignInLink(email);
+      await sendSignInCode(email);
       router.push({ pathname: '/(auth)/magic-link', params: { email } });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
@@ -137,7 +137,7 @@ export default function SignIn() {
 
         <View style={{ marginTop: spacing.lg }}>
           <Button
-            label="Email me a sign-in link"
+            label="Email me a code"
             onPress={continueWithEmail}
             disabled={!emailValid}
             loading={sending}

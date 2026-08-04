@@ -1,6 +1,6 @@
-import { httpsCallable } from '@react-native-firebase/functions';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 
-import { functionsClient } from './firebase';
+import { supabase } from './supabase';
 
 export type LiveKitJoinInfo = {
   token: string;
@@ -12,24 +12,28 @@ export type LiveKitJoinInfo = {
 export class MeetingJoinError extends Error {}
 
 /**
- * Calls the livekitToken Cloud Function, which validates the room code
+ * Calls the livekit-token Edge Function, which validates the room code
  * (and password, if set) and mints a short-lived LiveKit access token.
  * The LiveKit API secret never leaves that function's environment.
  */
 export async function fetchLiveKitToken(roomCode: string, password?: string): Promise<LiveKitJoinInfo> {
-  if (!functionsClient) {
-    throw new MeetingJoinError('Connect a Firebase project to enable live video.');
+  if (!supabase) {
+    throw new MeetingJoinError('Connect a Supabase project to enable live video.');
   }
 
-  try {
-    const callable = httpsCallable<{ roomCode: string; password?: string }, LiveKitJoinInfo>(
-      functionsClient,
-      'livekitToken',
-    );
-    const result = await callable({ roomCode, password });
-    return result.data;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Could not join this meeting.';
-    throw new MeetingJoinError(message);
+  const { data, error } = await supabase.functions.invoke<LiveKitJoinInfo>('livekit-token', {
+    body: { roomCode, password },
+  });
+
+  if (error) {
+    // FunctionsHttpError's `message` isn't the JSON body our function returns — pull the
+    // actual `{error: "..."}` string out of the response instead.
+    const body = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
+    throw new MeetingJoinError(body?.error ?? 'Could not join this meeting.');
   }
+  if (!data) {
+    throw new MeetingJoinError('Could not join this meeting.');
+  }
+
+  return data;
 }

@@ -35,13 +35,6 @@ yarn-error.*
 .env*.local
 .secret.local
 
-# Firebase project config (contains project-specific identifiers)
-google-services.json
-GoogleService-Info.plist
-.firebase/
-functions/lib/
-functions/node_modules/
-
 # typescript
 *.tsbuildinfo
 

@@ -1,7 +1,6 @@
-import { onAuthStateChanged } from '@react-native-firebase/auth';
 import { create } from 'zustand';
 
-import { auth, isFirebaseConfigured } from '@/lib/firebase';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
 
@@ -14,7 +13,7 @@ type AuthStore = {
 };
 
 export const useAuthStore = create<AuthStore>((set) => ({
-  status: isFirebaseConfigured ? 'loading' : 'signedOut',
+  status: isSupabaseConfigured ? 'loading' : 'signedOut',
   uid: null,
   email: null,
   setSignedIn: (uid, email) => set({ status: 'signedIn', uid, email }),
@@ -23,14 +22,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
 let listenerAttached = false;
 
-/** Call once from the root layout to sync auth state with Firebase's session. */
+/** Call once from the root layout to sync auth state with Supabase's session. */
 export function initAuthListener() {
-  if (listenerAttached || !auth) return;
+  if (listenerAttached || !supabase) return;
   listenerAttached = true;
 
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      useAuthStore.getState().setSignedIn(user.uid, user.email);
+  supabase.auth.onAuthStateChange((_event, session) => {
+    if (session?.user) {
+      useAuthStore.getState().setSignedIn(session.user.id, session.user.email ?? null);
     } else {
       useAuthStore.getState().setSignedOut();
     }

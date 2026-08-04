@@ -1,33 +1,26 @@
 import { useEffect, useState } from 'react';
-import {
-  Timestamp,
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-  type DocumentData,
-} from '@react-native-firebase/firestore';
-import { getDownloadURL, putFile, ref } from '@react-native-firebase/storage';
 
-import { firestore, storage } from '@/lib/firebase';
+import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import type { ChatMessage } from '@/types/domain';
 
-function mapMessage(id: string, data: DocumentData): ChatMessage {
-  const createdAt = data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date();
+type MessageRow = {
+  id: string;
+  sender_id: string;
+  sender_name: string;
+  text: string | null;
+  image_url: string | null;
+  created_at: string;
+};
+
+function mapMessage(row: MessageRow): ChatMessage {
   return {
-    id,
-    senderId: data.senderId,
-    senderName: data.senderName ?? 'Orbit User',
-    text: data.text ?? undefined,
-    imageUri: data.imageUrl ?? undefined,
-    createdAt: createdAt.toISOString(),
+    id: row.id,
+    senderId: row.sender_id,
+    senderName: row.sender_name ?? 'Orbit User',
+    text: row.text ?? undefined,
+    imageUri: row.image_url ?? undefined,
+    createdAt: row.created_at,
   };
 }
 
@@ -41,11 +34,15 @@ function dmConversationId(uidA: string, uidB: string) {
 }
 
 async function uploadChatImage(localUri: string, pathPrefix: string): Promise<string> {
-  if (!storage) throw new Error('Connect a Firebase project to share images.');
+  if (!supabase) throw new Error('Connect a Supabase project to share images.');
   const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-  const storageRef = ref(storage, `chat-uploads/${pathPrefix}/${filename}`);
-  await putFile(storageRef, localUri);
-  return getDownloadURL(storageRef);
+  const path = `${pathPrefix}/${filename}`;
+
+  const blob = await (await fetch(localUri)).blob();
+  const { error } = await supabase.storage.from('chat-uploads').upload(path, blob, { contentType: 'image/jpeg' });
+  if (error) throw error;
+
+  return supabase.storage.from('chat-uploads').getPublicUrl(path).data.publicUrl;
 }
 
 type ChatApi = {
@@ -61,81 +58,111 @@ export function useDmMessages(otherUid: string | undefined): ChatApi {
   const conversationId = uid && otherUid ? dmConversationId(uid, otherUid) : null;
 
   useEffect(() => {
-    if (!firestore || !uid || !otherUid || !conversationId) return;
-    const convRef = doc(firestore, 'conversations', conversationId);
-    getDoc(convRef).then((snap) => {
-      if (!snap.exists()) {
-        setDoc(convRef, { kind: 'dm', participantIds: [uid, otherUid].sort(), createdAt: serverTimestamp() });
-      }
-    });
+    if (!supabase || !uid || !otherUid || !conversationId) return;
+    supabase
+      .from('conversations')
+      .upsert({ id: conversationId, kind: 'dm', participant_ids: [uid, otherUid].sort() }, { ignoreDuplicates: true })
+      .then();
   }, [uid, otherUid, conversationId]);
 
   useEffect(() => {
-    if (!firestore || !conversationId) {
+    if (!supabase || !conversationId) {
       setMessages([]);
       return;
     }
-    const q = query(collection(firestore, 'conversations', conversationId, 'messages'), orderBy('createdAt', 'asc'));
-    return onSnapshot(q, (snap) => setMessages(snap.docs.map((d) => mapMessage(d.id, d.data()))));
+    const client = supabase;
+    let cancelled = false;
+
+    client
+      .from('conversation_messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        if (!cancelled && data) setMessages((data as MessageRow[]).map(mapMessage));
+      });
+
+    const channel = client
+      .channel(`conversation_messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'conversation_messages', filter: `conversation_id=eq.${conversationId}` },
+        (payload) => setMessages((prev) => [...prev, mapMessage(payload.new as MessageRow)]),
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      client.removeChannel(channel);
+    };
   }, [conversationId]);
 
   const sendText = async (text: string) => {
-    if (!firestore || !conversationId || !uid) return;
-    await addDoc(collection(firestore, 'conversations', conversationId, 'messages'), {
-      senderId: uid,
-      senderName: myDisplayName(),
-      text,
-      createdAt: serverTimestamp(),
-    });
+    if (!supabase || !conversationId || !uid) return;
+    await supabase
+      .from('conversation_messages')
+      .insert({ conversation_id: conversationId, sender_id: uid, sender_name: myDisplayName(), text });
   };
 
   const sendImage = async (localUri: string) => {
-    if (!firestore || !conversationId || !uid) return;
+    if (!supabase || !conversationId || !uid) return;
     const imageUrl = await uploadChatImage(localUri, conversationId);
-    await addDoc(collection(firestore, 'conversations', conversationId, 'messages'), {
-      senderId: uid,
-      senderName: myDisplayName(),
-      imageUrl,
-      createdAt: serverTimestamp(),
-    });
+    await supabase
+      .from('conversation_messages')
+      .insert({ conversation_id: conversationId, sender_id: uid, sender_name: myDisplayName(), image_url: imageUrl });
   };
 
   return { messages, sendText, sendImage };
 }
 
-/** A meeting's group chat, scoped as a subcollection of the meeting doc. */
+/** A meeting's group chat, scoped to a single meeting. */
 export function useMeetingMessages(meetingId: string | undefined): ChatApi {
   const uid = useAuthStore((s) => s.uid);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
-    if (!firestore || !meetingId) {
+    if (!supabase || !meetingId) {
       setMessages([]);
       return;
     }
-    const q = query(collection(firestore, 'meetings', meetingId, 'messages'), orderBy('createdAt', 'asc'));
-    return onSnapshot(q, (snap) => setMessages(snap.docs.map((d) => mapMessage(d.id, d.data()))));
+    const client = supabase;
+    let cancelled = false;
+
+    client
+      .from('meeting_messages')
+      .select('*')
+      .eq('meeting_id', meetingId)
+      .order('created_at', { ascending: true })
+      .then(({ data }) => {
+        if (!cancelled && data) setMessages((data as MessageRow[]).map(mapMessage));
+      });
+
+    const channel = client
+      .channel(`meeting_messages:${meetingId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'meeting_messages', filter: `meeting_id=eq.${meetingId}` },
+        (payload) => setMessages((prev) => [...prev, mapMessage(payload.new as MessageRow)]),
+      )
+      .subscribe();
+
+    return () => {
+      cancelled = true;
+      client.removeChannel(channel);
+    };
   }, [meetingId]);
 
   const sendText = async (text: string) => {
-    if (!firestore || !meetingId || !uid) return;
-    await addDoc(collection(firestore, 'meetings', meetingId, 'messages'), {
-      senderId: uid,
-      senderName: myDisplayName(),
-      text,
-      createdAt: serverTimestamp(),
-    });
+    if (!supabase || !meetingId || !uid) return;
+    await supabase.from('meeting_messages').insert({ meeting_id: meetingId, sender_id: uid, sender_name: myDisplayName(), text });
   };
 
   const sendImage = async (localUri: string) => {
-    if (!firestore || !meetingId || !uid) return;
+    if (!supabase || !meetingId || !uid) return;
     const imageUrl = await uploadChatImage(localUri, meetingId);
-    await addDoc(collection(firestore, 'meetings', meetingId, 'messages'), {
-      senderId: uid,
-      senderName: myDisplayName(),
-      imageUrl,
-      createdAt: serverTimestamp(),
-    });
+    await supabase
+      .from('meeting_messages')
+      .insert({ meeting_id: meetingId, sender_id: uid, sender_name: myDisplayName(), image_url: imageUrl });
   };
 
   return { messages, sendText, sendImage };
@@ -147,50 +174,79 @@ export function useRecentDms(): { otherUid: string; lastMessage: ChatMessage }[]
   const [threads, setThreads] = useState<{ otherUid: string; lastMessage: ChatMessage }[]>([]);
 
   useEffect(() => {
-    if (!firestore || !uid) {
+    if (!supabase || !uid) {
       setThreads([]);
       return;
     }
-    const unsubscribes: Array<() => void> = [];
+    const client = supabase;
+    const messageChannels = new Map<string, ReturnType<typeof client.channel>>();
+    const latestByConversation = new Map<string, ChatMessage>();
 
-    const convosQuery = query(collection(firestore, 'conversations'), where('participantIds', 'array-contains', uid));
-    const unsubscribeConvos = onSnapshot(convosQuery, (snap) => {
-      unsubscribes.forEach((u) => u());
-      unsubscribes.length = 0;
+    const publish = () => {
+      setThreads(
+        Array.from(latestByConversation.entries())
+          .map(([otherUid, lastMessage]) => ({ otherUid, lastMessage }))
+          .sort((a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()),
+      );
+    };
 
-      const dmDocs = snap.docs.filter((d) => d.data().kind === 'dm');
+    const watchConversation = (conversationId: string, otherUid: string) => {
+      if (messageChannels.has(conversationId)) return;
 
-      if (dmDocs.length === 0) {
-        setThreads([]);
-        return;
-      }
+      const loadLatest = () => {
+        client
+          .from('conversation_messages')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .then(({ data }) => {
+            const first = (data as MessageRow[] | null)?.[0];
+            if (!first) return;
+            latestByConversation.set(otherUid, mapMessage(first));
+            publish();
+          });
+      };
 
-      const latestByConversation = new Map<string, ChatMessage>();
-      dmDocs.forEach((convoDoc) => {
-        const otherUid = (convoDoc.data().participantIds as string[]).find((id) => id !== uid);
-        if (!otherUid) return;
+      loadLatest();
+      const channel = client
+        .channel(`conversation_messages:${conversationId}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'conversation_messages', filter: `conversation_id=eq.${conversationId}` },
+          loadLatest,
+        )
+        .subscribe();
+      messageChannels.set(conversationId, channel);
+    };
 
-        const lastMessageQuery = query(
-          collection(firestore!, 'conversations', convoDoc.id, 'messages'),
-          orderBy('createdAt', 'desc'),
-        );
-        const unsub = onSnapshot(lastMessageQuery, (msgSnap) => {
-          const first = msgSnap.docs[0];
-          if (!first) return;
-          latestByConversation.set(otherUid, mapMessage(first.id, first.data()));
-          setThreads(
-            Array.from(latestByConversation.entries())
-              .map(([id, lastMessage]) => ({ otherUid: id, lastMessage }))
-              .sort((a, b) => new Date(b.lastMessage.createdAt).getTime() - new Date(a.lastMessage.createdAt).getTime()),
-          );
+    client
+      .from('conversations')
+      .select('id, participant_ids')
+      .contains('participant_ids', [uid])
+      .then(({ data }) => {
+        (data as { id: string; participant_ids: string[] }[] | null)?.forEach((row) => {
+          const otherUid = row.participant_ids.find((id) => id !== uid);
+          if (otherUid) watchConversation(row.id, otherUid);
         });
-        unsubscribes.push(unsub);
       });
-    });
+
+    // Conversations are create-only (no update/delete policy), so INSERT is enough to
+    // catch a new DM thread started by the other side after this hook's initial load.
+    const newConversationsChannel = client
+      .channel('conversations:new')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conversations' }, (payload) => {
+        const row = payload.new as { id: string; participant_ids: string[] };
+        if (!row.participant_ids.includes(uid)) return;
+        const otherUid = row.participant_ids.find((id) => id !== uid);
+        if (otherUid) watchConversation(row.id, otherUid);
+      })
+      .subscribe();
 
     return () => {
-      unsubscribeConvos();
-      unsubscribes.forEach((u) => u());
+      client.removeChannel(newConversationsChannel);
+      messageChannels.forEach((channel) => client.removeChannel(channel));
+      messageChannels.clear();
     };
   }, [uid]);
 

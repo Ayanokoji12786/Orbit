@@ -1,49 +1,34 @@
 import { useEffect, useState } from 'react';
-import { Linking, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, Button, GradientBackground, IconButton } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
-import { completeSignInWithLink, isSignInLink, sendSignInLink } from '@/features/auth/api';
+import { sendSignInCode, verifySignInCode } from '@/features/auth/api';
 
 export default function MagicLinkWait() {
   const { spacing, radii, colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const { email } = useLocalSearchParams<{ email: string }>();
-  const [pastedLink, setPastedLink] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
   const [cooldown, setCooldown] = useState(30);
 
-  const complete = async (link: string) => {
-    if (!isSignInLink(link)) {
-      setError("That doesn't look like the sign-in link from your email.");
-      return;
-    }
+  const verify = async () => {
     setError(null);
     setVerifying(true);
     try {
-      await completeSignInWithLink(email, link);
+      await verifySignInCode(email, code.trim());
       // Auth state listener picks up the new session; the root gate redirects automatically.
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'That link is invalid or has expired.');
+      setError(err instanceof Error ? err.message : 'That code is invalid or has expired.');
     } finally {
       setVerifying(false);
     }
   };
-
-  useEffect(() => {
-    Linking.getInitialURL().then((url) => {
-      if (url && isSignInLink(url)) complete(url);
-    });
-    const subscription = Linking.addEventListener('url', ({ url }) => {
-      if (isSignInLink(url)) complete(url);
-    });
-    return () => subscription.remove();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   useEffect(() => {
     if (cooldown === 0) return;
@@ -55,9 +40,9 @@ export default function MagicLinkWait() {
     setCooldown(30);
     setResending(true);
     try {
-      await sendSignInLink(email);
+      await sendSignInCode(email);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not resend the link.');
+      setError(err instanceof Error ? err.message : 'Could not resend the code.');
     } finally {
       setResending(false);
     }
@@ -72,21 +57,24 @@ export default function MagicLinkWait() {
           Check your email
         </AppText>
         <AppText variant="body" color="textSecondary" style={{ marginTop: spacing.xs }}>
-          We sent a sign-in link to{'\n'}
-          <AppText variant="bodyMedium">{email}</AppText>. Open it on this device to continue.
+          We sent a 6-digit code to{'\n'}
+          <AppText variant="bodyMedium">{email}</AppText>.
         </AppText>
 
         <View style={{ marginTop: spacing.xxl }}>
           <AppText variant="captionMedium" color="textSecondary">
-            OPENED THE LINK SOMEWHERE ELSE? PASTE IT HERE
+            ENTER CODE
           </AppText>
           <TextInput
-            value={pastedLink}
-            onChangeText={setPastedLink}
-            placeholder="https://…"
+            value={code}
+            onChangeText={(text) => setCode(text.replace(/[^0-9]/g, '').slice(0, 6))}
+            placeholder="123456"
             placeholderTextColor={colors.textTertiary}
             autoCapitalize="none"
             autoCorrect={false}
+            keyboardType="number-pad"
+            textContentType="oneTimeCode"
+            maxLength={6}
             style={{
               height: 52,
               borderRadius: radii.md,
@@ -96,7 +84,8 @@ export default function MagicLinkWait() {
               paddingHorizontal: spacing.base,
               marginTop: spacing.xs,
               color: colors.textPrimary,
-              fontSize: 16,
+              fontSize: 20,
+              letterSpacing: 4,
             }}
           />
         </View>
@@ -108,12 +97,12 @@ export default function MagicLinkWait() {
         )}
 
         <View style={{ marginTop: spacing.lg }}>
-          <Button label="Continue" onPress={() => complete(pastedLink.trim())} loading={verifying} disabled={!pastedLink.trim()} />
+          <Button label="Continue" onPress={verify} loading={verifying} disabled={code.length !== 6} />
         </View>
 
         <View style={{ alignItems: 'center', marginTop: spacing.lg }}>
           <Button
-            label={cooldown > 0 ? `Resend link in ${cooldown}s` : 'Resend link'}
+            label={cooldown > 0 ? `Resend code in ${cooldown}s` : 'Resend code'}
             variant="ghost"
             fullWidth={false}
             disabled={cooldown > 0}
