@@ -2,17 +2,44 @@ import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 
-import { AppText, Button, GradientBackground } from '@/components/ui';
+import { AppText, Button, DateTimeField, GradientBackground } from '@/components/ui';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { useAppTheme } from '@/design-system/useAppTheme';
+import { scheduleMeetingReminder } from '@/lib/notifications';
+import { useMeetingsStore } from '@/stores/meetings-store';
 
 function randomRoomId() {
   return Math.random().toString(36).slice(2, 8);
 }
 
+function defaultStartTime() {
+  const date = new Date(Date.now() + 60 * 60 * 1000);
+  date.setMinutes(0, 0, 0);
+  return date;
+}
+
 export default function NewMeeting() {
   const { colors, spacing, radii } = useAppTheme();
   const [title, setTitle] = useState('');
+  const [startsAt, setStartsAt] = useState(defaultStartTime());
+  const [scheduling, setScheduling] = useState(false);
+  const addMeeting = useMeetingsStore((s) => s.addMeeting);
+
+  const schedule = async () => {
+    setScheduling(true);
+    const meeting = {
+      id: randomRoomId(),
+      title: title.trim(),
+      startsAt: startsAt.toISOString(),
+      durationMinutes: 30,
+      participants: [],
+      hasPassword: false,
+    };
+    addMeeting(meeting);
+    await scheduleMeetingReminder(meeting);
+    setScheduling(false);
+    router.back();
+  };
 
   return (
     <GradientBackground>
@@ -51,9 +78,18 @@ export default function NewMeeting() {
           />
         </View>
 
-        <Button label="Schedule Meeting" variant="secondary" disabled={!title} onPress={() => router.back()} />
+        <DateTimeField label="Starts" value={startsAt} onChange={setStartsAt} minimumDate={new Date()} />
+
+        <Button
+          label="Schedule Meeting"
+          variant="secondary"
+          disabled={!title.trim()}
+          loading={scheduling}
+          onPress={schedule}
+        />
         <AppText variant="caption" color="textTertiary" style={{ textAlign: 'center' }}>
-          Scheduling persists once Orbit is connected to a Supabase project (Phase 2).
+          Saved on this device and reminds you 10 minutes before it starts. Inviting others needs Orbit's
+          backend (Phase 2).
         </AppText>
       </View>
     </GradientBackground>

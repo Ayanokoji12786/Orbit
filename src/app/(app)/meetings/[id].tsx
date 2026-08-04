@@ -5,14 +5,15 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { AppText, Avatar, Button, Chip } from '@/components/ui';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { useAppTheme } from '@/design-system/useAppTheme';
-import { mockRecentMeetings, mockUpcomingMeeting } from '@/features/home/mock-data';
+import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/useMeetings';
 import { formatClockTime, formatCountdown } from '@/utils/datetime';
 
 export default function MeetingDetail() {
   const { colors, spacing, radii } = useAppTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const meeting =
-    [mockUpcomingMeeting, ...mockRecentMeetings].find((m) => m.id === id) ?? mockUpcomingMeeting;
+  const upcoming = useUpcomingMeetings();
+  const past = usePastMeetings();
+  const meeting = [...upcoming, ...past].find((m) => m.id === id) ?? upcoming[0] ?? past[0];
   const isUpcoming = new Date(meeting.startsAt).getTime() > Date.now();
 
   return (
@@ -29,17 +30,19 @@ export default function MeetingDetail() {
           </AppText>
         </View>
 
-        <View>
-          <AppText variant="headline">Participants</AppText>
-          <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
-            {meeting.participants.map((p) => (
-              <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <Avatar name={p.name} uri={p.avatarUrl} size={36} />
-                <AppText variant="body">{p.name}</AppText>
-              </View>
-            ))}
+        {meeting.participants.length > 0 && (
+          <View>
+            <AppText variant="headline">Participants</AppText>
+            <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
+              {meeting.participants.map((p) => (
+                <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Avatar name={p.name} uri={p.avatarUrl} size={36} />
+                  <AppText variant="body">{p.name}</AppText>
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
           <Ionicons name={meeting.hasPassword ? 'lock-closed' : 'lock-open-outline'} size={16} color={colors.textTertiary} />

@@ -6,15 +6,11 @@ import { AppText, Avatar, IconButton, PressableScale, SectionHeader } from '@/co
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { AiSummaryCard } from '@/features/home/AiSummaryCard';
 import { FavoriteContactsRow } from '@/features/home/FavoriteContactsRow';
-import {
-  mockContacts,
-  mockRecentMeetings,
-  mockRecordingSummary,
-  mockUpcomingMeeting,
-} from '@/features/home/mock-data';
+import { mockContacts, mockRecordingSummary } from '@/features/home/mock-data';
 import { QuickActions } from '@/features/home/QuickActions';
 import { UpcomingMeetingCard } from '@/features/home/UpcomingMeetingCard';
 import { MeetingRow } from '@/features/meetings/components/MeetingRow';
+import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/useMeetings';
 import { useAuthStore } from '@/stores/auth-store';
 
 function greeting(): string {
@@ -29,6 +25,9 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const email = useAuthStore((s) => s.email);
   const displayName = email ? email.split('@')[0] : 'there';
+  const upcoming = useUpcomingMeetings();
+  const recent = usePastMeetings().slice(0, 3);
+  const nextMeeting = upcoming[0];
 
   return (
     <ScrollView
@@ -66,10 +65,12 @@ export default function Home() {
         onSchedule={() => router.push('/meetings/new')}
       />
 
-      <View>
-        <SectionHeader title="Upcoming" actionLabel="See all" onAction={() => router.push('/(app)/(tabs)/meetings')} />
-        <UpcomingMeetingCard meeting={mockUpcomingMeeting} onJoin={() => router.push(`/meeting/${mockUpcomingMeeting.id}`)} />
-      </View>
+      {nextMeeting && (
+        <View>
+          <SectionHeader title="Upcoming" actionLabel="See all" onAction={() => router.push('/(app)/(tabs)/meetings')} />
+          <UpcomingMeetingCard meeting={nextMeeting} onJoin={() => router.push(`/meeting/${nextMeeting.id}`)} />
+        </View>
+      )}
 
       <View>
         <SectionHeader title="AI summaries" actionLabel="View all" onAction={() => router.push('/recordings')} />
@@ -84,7 +85,7 @@ export default function Home() {
       <View>
         <SectionHeader title="Recent meetings" />
         <View style={{ gap: spacing.sm }}>
-          {mockRecentMeetings.map((meeting) => (
+          {recent.map((meeting) => (
             <MeetingRow key={meeting.id} meeting={meeting} onPress={() => router.push(`/meetings/${meeting.id}`)} />
           ))}
         </View>

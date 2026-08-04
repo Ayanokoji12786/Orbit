@@ -3,10 +3,10 @@ import { ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppText, Button, IconButton, PressableScale } from '@/components/ui';
+import { AppText, Button, EmptyState, IconButton, PressableScale } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
-import { mockRecentMeetings, mockUpcomingMeeting } from '@/features/home/mock-data';
 import { MeetingRow } from '@/features/meetings/components/MeetingRow';
+import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/useMeetings';
 
 type Segment = 'upcoming' | 'past';
 
@@ -15,8 +15,8 @@ export default function Meetings() {
   const insets = useSafeAreaInsets();
   const [segment, setSegment] = useState<Segment>('upcoming');
 
-  const upcoming = [mockUpcomingMeeting];
-  const past = mockRecentMeetings;
+  const upcoming = useUpcomingMeetings();
+  const past = usePastMeetings();
   const list = segment === 'upcoming' ? upcoming : past;
 
   return (
@@ -48,9 +48,23 @@ export default function Meetings() {
       </View>
 
       <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
-        {list.map((meeting) => (
-          <MeetingRow key={meeting.id} meeting={meeting} onPress={() => router.push(`/meetings/${meeting.id}`)} />
-        ))}
+        {list.length === 0 ? (
+          <View style={{ paddingTop: spacing.xxl }}>
+            <EmptyState
+              icon={segment === 'upcoming' ? 'calendar-outline' : 'time-outline'}
+              title={segment === 'upcoming' ? 'Nothing scheduled' : 'No past meetings'}
+              subtitle={
+                segment === 'upcoming'
+                  ? 'Schedule a meeting and it will show up here.'
+                  : 'Meetings you attend will show up here.'
+              }
+            />
+          </View>
+        ) : (
+          list.map((meeting) => (
+            <MeetingRow key={meeting.id} meeting={meeting} onPress={() => router.push(`/meetings/${meeting.id}`)} />
+          ))
+        )}
       </View>
 
       <View style={{ marginTop: spacing.xl }}>

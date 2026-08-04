@@ -10,6 +10,7 @@ export default function AppLayout() {
       <Stack.Screen name="recordings/[id]" options={{ presentation: 'card' }} />
       <Stack.Screen name="notifications/index" options={{ presentation: 'card' }} />
       <Stack.Screen name="contacts/[id]" options={{ presentation: 'card' }} />
+      <Stack.Screen name="chat/[contactId]" options={{ presentation: 'card' }} />
       <Stack.Screen name="meetings/new" options={{ presentation: 'modal' }} />
       <Stack.Screen name="meetings/join" options={{ presentation: 'modal' }} />
       <Stack.Screen name="meetings/[id]" options={{ presentation: 'card' }} />

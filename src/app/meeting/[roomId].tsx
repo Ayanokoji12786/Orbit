@@ -1,13 +1,23 @@
 import { useState } from 'react';
 import { View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, Avatar, IconButton } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { mockContacts } from '@/features/home/mock-data';
+import {
+  ChatPanel,
+  ControlBar,
+  FloatingReaction,
+  MoreSheet,
+  ParticipantsSheet,
+  PollsPanel,
+  WhiteboardOverlay,
+} from '@/features/meeting-room';
 import { useAuthStore } from '@/stores/auth-store';
+
+type Panel = 'chat' | 'whiteboard' | 'polls' | 'participants' | 'more' | null;
 
 export default function MeetingRoom() {
   const { spacing, radii } = useAppTheme();
@@ -18,8 +28,16 @@ export default function MeetingRoom() {
 
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(true);
+  const [panel, setPanel] = useState<Panel>(null);
+  const [reactions, setReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
 
   const tiles = [{ id: 'self', name: selfName }, ...mockContacts.slice(0, 3)];
+
+  const spawnReaction = (emoji: string) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const x = 40 + Math.random() * 220;
+    setReactions((current) => [...current, { id, emoji, x }]);
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
@@ -40,7 +58,12 @@ export default function MeetingRoom() {
             {roomId}
           </AppText>
         </View>
-        <IconButton name="people-outline" variant="glass" accessibilityLabel="Participants" onPress={() => {}} />
+        <IconButton
+          name="people-outline"
+          variant="glass"
+          accessibilityLabel="Participants"
+          onPress={() => setPanel('participants')}
+        />
       </View>
 
       <View
@@ -73,42 +96,30 @@ export default function MeetingRoom() {
         ))}
       </View>
 
+      {reactions.map((r) => (
+        <FloatingReaction
+          key={r.id}
+          emoji={r.emoji}
+          startX={r.x}
+          onDone={() => setReactions((current) => current.filter((x) => x.id !== r.id))}
+        />
+      ))}
+
       <View
         style={{
           position: 'absolute',
           bottom: 40,
           left: spacing.lg,
           right: spacing.lg,
-          padding: spacing.md,
-          borderRadius: radii.xl,
-          backgroundColor: 'rgba(255,255,255,0.06)',
-          borderWidth: 1,
-          borderColor: 'rgba(255,255,255,0.1)',
-          flexDirection: 'row',
-          justifyContent: 'space-around',
         }}>
-        <IconButton
-          name={muted ? 'mic-off' : 'mic'}
-          variant="filled"
-          tone={muted ? 'danger' : 'default'}
-          accessibilityLabel={muted ? 'Unmute' : 'Mute'}
-          onPress={() => setMuted((m) => !m)}
-        />
-        <IconButton
-          name={cameraOff ? 'videocam-off' : 'videocam'}
-          variant="filled"
-          tone={cameraOff ? 'danger' : 'default'}
-          accessibilityLabel={cameraOff ? 'Turn camera on' : 'Turn camera off'}
-          onPress={() => setCameraOff((c) => !c)}
-        />
-        <IconButton name="hand-left-outline" variant="filled" accessibilityLabel="Raise hand" onPress={() => {}} />
-        <IconButton name="chatbubble-outline" variant="filled" accessibilityLabel="Chat" onPress={() => {}} />
-        <IconButton
-          name="call"
-          variant="filled"
-          tone="danger"
-          accessibilityLabel="Leave meeting"
-          onPress={() => router.back()}
+        <ControlBar
+          muted={muted}
+          onToggleMute={() => setMuted((m) => !m)}
+          cameraOff={cameraOff}
+          onToggleCamera={() => setCameraOff((c) => !c)}
+          onReact={spawnReaction}
+          onMore={() => setPanel('more')}
+          onLeave={() => router.back()}
         />
       </View>
 
@@ -119,11 +130,32 @@ export default function MeetingRoom() {
           left: spacing.lg,
           right: spacing.lg,
           alignItems: 'center',
+          pointerEvents: 'none',
         }}>
         <AppText variant="micro" color="textTertiary">
           Live video needs a connected LiveKit project — this is the Phase 1 interface preview.
         </AppText>
       </View>
+
+      <MoreSheet
+        visible={panel === 'more'}
+        onClose={() => setPanel(null)}
+        actions={[
+          { icon: 'chatbubble-outline', label: 'Chat', onPress: () => setPanel('chat') },
+          { icon: 'brush-outline', label: 'Whiteboard', onPress: () => setPanel('whiteboard') },
+          { icon: 'stats-chart-outline', label: 'Polls', onPress: () => setPanel('polls') },
+          { icon: 'hand-left-outline', label: 'Raise hand', onPress: () => setPanel(null) },
+        ]}
+      />
+
+      <ChatPanel visible={panel === 'chat'} onClose={() => setPanel(null)} roomId={roomId} />
+      <PollsPanel visible={panel === 'polls'} onClose={() => setPanel(null)} />
+      <ParticipantsSheet
+        visible={panel === 'participants'}
+        onClose={() => setPanel(null)}
+        participants={tiles.map((t) => ({ id: t.id, name: t.name, muted: t.id === 'self' ? muted : false }))}
+      />
+      <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} />
     </View>
   );
 }

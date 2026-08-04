@@ -18,7 +18,7 @@ export const FloatingTabBar = forwardRef<View, ViewProps>(function FloatingTabBa
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={[styles.wrapper, { bottom: insets.bottom + 12 }]} pointerEvents="box-none">
+    <View style={[styles.wrapper, { bottom: insets.bottom + 12, pointerEvents: 'box-none' }]}>
       <View ref={ref} style={[styles.bar, { borderRadius: radii.xl, borderColor: colors.border }, style]} {...rest}>
         <BlurView
           intensity={50}

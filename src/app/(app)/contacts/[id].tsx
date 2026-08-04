@@ -39,7 +39,7 @@ export default function ContactDetail() {
             variant="filled"
             size={54}
             accessibilityLabel="Message"
-            onPress={() => {}}
+            onPress={() => router.push(`/chat/${contact.id}`)}
           />
           <IconButton
             name="call"

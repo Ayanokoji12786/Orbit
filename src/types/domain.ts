@@ -23,3 +23,19 @@ export type RecordingSummary = {
   createdAt: string;
   highlight: string;
 };
+
+export type ChatMessage = {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text?: string;
+  imageUri?: string;
+  createdAt: string;
+};
+
+export type Poll = {
+  id: string;
+  question: string;
+  options: { id: string; label: string; votes: number }[];
+  votedOptionId: string | null;
+};

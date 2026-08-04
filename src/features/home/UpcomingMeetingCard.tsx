@@ -32,18 +32,20 @@ export function UpcomingMeetingCard({ meeting, onJoin }: Props) {
         {meeting.title}
       </AppText>
 
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, gap: spacing.sm }}>
-        <View style={{ flexDirection: 'row' }}>
-          {meeting.participants.slice(0, 4).map((p, i) => (
-            <View key={p.id} style={{ marginLeft: i === 0 ? 0 : -10 }}>
-              <Avatar name={p.name} uri={p.avatarUrl} size={30} />
-            </View>
-          ))}
+      {meeting.participants.length > 0 && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: spacing.md, gap: spacing.sm }}>
+          <View style={{ flexDirection: 'row' }}>
+            {meeting.participants.slice(0, 4).map((p, i) => (
+              <View key={p.id} style={{ marginLeft: i === 0 ? 0 : -10 }}>
+                <Avatar name={p.name} uri={p.avatarUrl} size={30} />
+              </View>
+            ))}
+          </View>
+          <AppText variant="caption" color="textSecondary">
+            {meeting.participants.length} joining
+          </AppText>
         </View>
-        <AppText variant="caption" color="textSecondary">
-          {meeting.participants.length} joining
-        </AppText>
-      </View>
+      )}
 
       <View style={{ marginTop: spacing.lg }}>
         <Button label="Join meeting" onPress={onJoin} />
