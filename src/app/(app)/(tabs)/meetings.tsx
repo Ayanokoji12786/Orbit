@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Button, EmptyState, IconButton, PressableScale } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { MeetingRow } from '@/features/meetings/components/MeetingRow';
-import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/useMeetings';
+import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/api';
 
 type Segment = 'upcoming' | 'past';
 

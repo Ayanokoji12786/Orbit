@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, Avatar, Button, PressableScale } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isFirebaseConfigured } from '@/lib/firebase';
 import { signOut } from '@/features/auth/api';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -75,9 +75,9 @@ export default function Settings() {
         ))}
       </View>
 
-      {!isSupabaseConfigured && (
+      {!isFirebaseConfigured && (
         <AppText variant="caption" color="textTertiary" style={{ marginTop: spacing.lg, textAlign: 'center' }}>
-          Connect a Supabase project to enable sign-out and live account data.
+          Connect a Firebase project to enable sign-out and live account data.
         </AppText>
       )}
 
@@ -85,7 +85,7 @@ export default function Settings() {
         <Button
           label="Sign Out"
           variant="destructive"
-          disabled={!isSupabaseConfigured}
+          disabled={!isFirebaseConfigured}
           onPress={async () => {
             await signOut();
             router.replace('/(auth)/sign-in');

@@ -2,10 +2,10 @@ import { ScrollView, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { AppText, Avatar, Button, Chip } from '@/components/ui';
+import { AppText, Avatar, Button, Chip, EmptyState } from '@/components/ui';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { useAppTheme } from '@/design-system/useAppTheme';
-import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/useMeetings';
+import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/api';
 import { formatClockTime, formatCountdown } from '@/utils/datetime';
 
 export default function MeetingDetail() {
@@ -13,7 +13,19 @@ export default function MeetingDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const upcoming = useUpcomingMeetings();
   const past = usePastMeetings();
-  const meeting = [...upcoming, ...past].find((m) => m.id === id) ?? upcoming[0] ?? past[0];
+  const meeting = [...upcoming, ...past].find((m) => m.id === id);
+
+  if (!meeting) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <ScreenHeader title="Meeting Details" />
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <EmptyState icon="calendar-outline" title="Meeting not found" subtitle="It may have been cancelled or already ended." />
+        </View>
+      </View>
+    );
+  }
+
   const isUpcoming = new Date(meeting.startsAt).getTime() > Date.now();
 
   return (
@@ -52,7 +64,7 @@ export default function MeetingDetail() {
         </View>
 
         {isUpcoming ? (
-          <Button label="Join meeting" onPress={() => router.push(`/meeting/${meeting.id}`)} />
+          <Button label="Join meeting" onPress={() => router.push(`/meeting/${meeting.roomCode}`)} />
         ) : (
           <Button label="View recording" variant="secondary" onPress={() => router.push(`/recordings/${meeting.id}`)} />
         )}

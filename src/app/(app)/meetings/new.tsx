@@ -5,12 +5,8 @@ import { router } from 'expo-router';
 import { AppText, Button, DateTimeField, GradientBackground } from '@/components/ui';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { useAppTheme } from '@/design-system/useAppTheme';
+import { createMeeting } from '@/features/meetings/api';
 import { scheduleMeetingReminder } from '@/lib/notifications';
-import { useMeetingsStore } from '@/stores/meetings-store';
-
-function randomRoomId() {
-  return Math.random().toString(36).slice(2, 8);
-}
 
 function defaultStartTime() {
   const date = new Date(Date.now() + 60 * 60 * 1000);
@@ -23,29 +19,40 @@ export default function NewMeeting() {
   const [title, setTitle] = useState('');
   const [startsAt, setStartsAt] = useState(defaultStartTime());
   const [scheduling, setScheduling] = useState(false);
-  const addMeeting = useMeetingsStore((s) => s.addMeeting);
+  const [startingInstant, setStartingInstant] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startInstantMeeting = async () => {
+    setError(null);
+    setStartingInstant(true);
+    try {
+      const meeting = await createMeeting({ title: title.trim() || 'Instant Meeting', startsAt: new Date() });
+      router.replace(`/meeting/${meeting.roomCode}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start the meeting.');
+      setStartingInstant(false);
+    }
+  };
 
   const schedule = async () => {
+    setError(null);
     setScheduling(true);
-    const meeting = {
-      id: randomRoomId(),
-      title: title.trim(),
-      startsAt: startsAt.toISOString(),
-      durationMinutes: 30,
-      participants: [],
-      hasPassword: false,
-    };
-    addMeeting(meeting);
-    await scheduleMeetingReminder(meeting);
-    setScheduling(false);
-    router.back();
+    try {
+      const meeting = await createMeeting({ title: title.trim(), startsAt, durationMinutes: 30 });
+      await scheduleMeetingReminder(meeting);
+      router.back();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not schedule the meeting.');
+    } finally {
+      setScheduling(false);
+    }
   };
 
   return (
     <GradientBackground>
       <ScreenHeader title="New Meeting" />
       <View style={{ paddingHorizontal: spacing.lg, gap: spacing.lg }}>
-        <Button label="Start Instant Meeting" onPress={() => router.replace(`/meeting/${randomRoomId()}`)} />
+        <Button label="Start Instant Meeting" onPress={startInstantMeeting} loading={startingInstant} />
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
@@ -80,6 +87,12 @@ export default function NewMeeting() {
 
         <DateTimeField label="Starts" value={startsAt} onChange={setStartsAt} minimumDate={new Date()} />
 
+        {error && (
+          <AppText variant="caption" color="error" style={{ textAlign: 'center' }}>
+            {error}
+          </AppText>
+        )}
+
         <Button
           label="Schedule Meeting"
           variant="secondary"
@@ -88,8 +101,8 @@ export default function NewMeeting() {
           onPress={schedule}
         />
         <AppText variant="caption" color="textTertiary" style={{ textAlign: 'center' }}>
-          Saved on this device and reminds you 10 minutes before it starts. Inviting others needs Orbit's
-          backend (Phase 2).
+          Reminds you 10 minutes before it starts. Inviting specific people is coming soon — for now, share
+          the meeting code from the meeting screen.
         </AppText>
       </View>
     </GradientBackground>

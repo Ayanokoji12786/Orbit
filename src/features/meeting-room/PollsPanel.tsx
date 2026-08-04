@@ -2,43 +2,19 @@ import { useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 
 import { AppText, BottomSheet, Button, EmptyState, IconButton } from '@/components/ui';
-import type { Poll } from '@/types/domain';
 
 import { PollCard } from './PollCard';
+import { useMeetingPolls } from './polls-api';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
+  meetingId: string;
 };
 
-export function PollsPanel({ visible, onClose }: Props) {
-  const [polls, setPolls] = useState<Poll[]>([]);
+export function PollsPanel({ visible, onClose, meetingId }: Props) {
+  const { polls, createPoll, vote } = useMeetingPolls(meetingId);
   const [creating, setCreating] = useState(false);
-
-  const vote = (pollId: string, optionId: string) => {
-    setPolls((current) =>
-      current.map((poll) =>
-        poll.id === pollId
-          ? {
-              ...poll,
-              votedOptionId: optionId,
-              options: poll.options.map((o) => (o.id === optionId ? { ...o, votes: o.votes + 1 } : o)),
-            }
-          : poll,
-      ),
-    );
-  };
-
-  const createPoll = (question: string, optionLabels: string[]) => {
-    const poll: Poll = {
-      id: `${Date.now()}`,
-      question,
-      votedOptionId: null,
-      options: optionLabels.map((label, i) => ({ id: `${Date.now()}-${i}`, label, votes: 0 })),
-    };
-    setPolls((current) => [poll, ...current]);
-    setCreating(false);
-  };
 
   return (
     <BottomSheet
@@ -62,7 +38,13 @@ export function PollsPanel({ visible, onClose }: Props) {
       </View>
 
       {creating ? (
-        <CreatePollForm onCancel={() => setCreating(false)} onCreate={createPoll} />
+        <CreatePollForm
+          onCancel={() => setCreating(false)}
+          onCreate={async (question, options) => {
+            await createPoll(question, options);
+            setCreating(false);
+          }}
+        />
       ) : (
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}>
           {polls.length === 0 ? (
@@ -80,17 +62,27 @@ function CreatePollForm({
   onCreate,
   onCancel,
 }: {
-  onCreate: (question: string, options: string[]) => void;
+  onCreate: (question: string, options: string[]) => Promise<void>;
   onCancel: () => void;
 }) {
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
+  const [submitting, setSubmitting] = useState(false);
 
   const updateOption = (index: number, value: string) => {
     setOptions((current) => current.map((o, i) => (i === index ? value : o)));
   };
 
   const canCreate = question.trim().length > 0 && options.filter((o) => o.trim()).length >= 2;
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      await onCreate(question.trim(), options.map((o) => o.trim()).filter(Boolean));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <View style={{ paddingHorizontal: 16, gap: 12 }}>
@@ -119,11 +111,7 @@ function CreatePollForm({
           <Button label="Cancel" variant="secondary" onPress={onCancel} />
         </View>
         <View style={{ flex: 1 }}>
-          <Button
-            label="Create"
-            disabled={!canCreate}
-            onPress={() => onCreate(question.trim(), options.map((o) => o.trim()).filter(Boolean))}
-          />
+          <Button label="Create" disabled={!canCreate} loading={submitting} onPress={submit} />
         </View>
       </View>
     </View>

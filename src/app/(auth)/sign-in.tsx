@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, Button, Divider, GradientBackground, IconButton } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
-import { sendEmailOtp, signInWithApple } from '@/features/auth/api';
+import { sendSignInLink, signInWithApple } from '@/features/auth/api';
 import { useGoogleSignIn } from '@/features/auth/useGoogleSignIn';
 
 export default function SignIn() {
@@ -25,8 +25,8 @@ export default function SignIn() {
     setError(null);
     setSending(true);
     try {
-      await sendEmailOtp(email);
-      router.push({ pathname: '/(auth)/otp', params: { email } });
+      await sendSignInLink(email);
+      router.push({ pathname: '/(auth)/magic-link', params: { email } });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
     } finally {
@@ -87,6 +87,7 @@ export default function SignIn() {
             variant="secondary"
             onPress={() => google.promptAsync()}
             disabled={!google.isAvailable}
+            loading={google.loading}
             icon={<IconGlyph letter="G" />}
           />
         </View>
@@ -136,7 +137,7 @@ export default function SignIn() {
 
         <View style={{ marginTop: spacing.lg }}>
           <Button
-            label="Continue with Email"
+            label="Email me a sign-in link"
             onPress={continueWithEmail}
             disabled={!emailValid}
             loading={sending}

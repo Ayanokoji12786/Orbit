@@ -1,18 +1,17 @@
 import { View } from 'react-native';
 
 import { AppText, BottomSheet } from '@/components/ui';
-import { ChatThread, meetingThreadId, useChatStore } from '@/features/chat';
+import { ChatThread } from '@/features/chat';
+import { useMeetingMessages } from '@/features/chat/api';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  roomId: string;
+  meetingId: string;
 };
 
-export function ChatPanel({ visible, onClose, roomId }: Props) {
-  const threadId = meetingThreadId(roomId);
-  const messages = useChatStore((s) => s.threads[threadId]) ?? [];
-  const sendMessage = useChatStore((s) => s.sendMessage);
+export function ChatPanel({ visible, onClose, meetingId }: Props) {
+  const { messages, sendText, sendImage } = useMeetingMessages(meetingId);
 
   return (
     <BottomSheet
@@ -26,13 +25,7 @@ export function ChatPanel({ visible, onClose, roomId }: Props) {
           In-call chat
         </AppText>
       </View>
-      <ChatThread
-        messages={messages}
-        showSenderNames
-        forceDark
-        onSendText={(text) => sendMessage(threadId, { text })}
-        onSendImage={(imageUri) => sendMessage(threadId, { imageUri })}
-      />
+      <ChatThread messages={messages} showSenderNames forceDark onSendText={sendText} onSendImage={sendImage} />
     </BottomSheet>
   );
 }

@@ -4,13 +4,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, Avatar, IconButton, PressableScale, SectionHeader } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
+import { useContacts } from '@/features/contacts/api';
 import { AiSummaryCard } from '@/features/home/AiSummaryCard';
 import { FavoriteContactsRow } from '@/features/home/FavoriteContactsRow';
-import { mockContacts, mockRecordingSummary } from '@/features/home/mock-data';
+import { mockRecordingSummary } from '@/features/home/mock-data';
 import { QuickActions } from '@/features/home/QuickActions';
 import { UpcomingMeetingCard } from '@/features/home/UpcomingMeetingCard';
 import { MeetingRow } from '@/features/meetings/components/MeetingRow';
-import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/useMeetings';
+import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/api';
 import { useAuthStore } from '@/stores/auth-store';
 
 function greeting(): string {
@@ -28,6 +29,8 @@ export default function Home() {
   const upcoming = useUpcomingMeetings();
   const recent = usePastMeetings().slice(0, 3);
   const nextMeeting = upcoming[0];
+  const { contacts } = useContacts();
+  const favorites = contacts.filter((c) => c.isFavorite);
 
   return (
     <ScrollView
@@ -68,7 +71,7 @@ export default function Home() {
       {nextMeeting && (
         <View>
           <SectionHeader title="Upcoming" actionLabel="See all" onAction={() => router.push('/(app)/(tabs)/meetings')} />
-          <UpcomingMeetingCard meeting={nextMeeting} onJoin={() => router.push(`/meeting/${nextMeeting.id}`)} />
+          <UpcomingMeetingCard meeting={nextMeeting} onJoin={() => router.push(`/meeting/${nextMeeting.roomCode}`)} />
         </View>
       )}
 
@@ -77,10 +80,12 @@ export default function Home() {
         <AiSummaryCard summary={mockRecordingSummary} onPress={() => router.push(`/recordings/${mockRecordingSummary.meetingId}`)} />
       </View>
 
-      <View>
-        <SectionHeader title="Favorites" actionLabel="See all" onAction={() => router.push('/(app)/(tabs)/contacts')} />
-        <FavoriteContactsRow contacts={mockContacts} onPressContact={(c) => router.push(`/contacts/${c.id}`)} />
-      </View>
+      {favorites.length > 0 && (
+        <View>
+          <SectionHeader title="Favorites" actionLabel="See all" onAction={() => router.push('/(app)/(tabs)/contacts')} />
+          <FavoriteContactsRow contacts={favorites} onPressContact={(c) => router.push(`/contacts/${c.id}`)} />
+        </View>
+      )}
 
       <View>
         <SectionHeader title="Recent meetings" />

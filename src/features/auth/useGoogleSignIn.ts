@@ -1,53 +1,45 @@
-import { useEffect } from 'react';
-import { Platform } from 'react-native';
-import * as Google from 'expo-auth-session/providers/google';
-import * as WebBrowser from 'expo-web-browser';
+import { useCallback, useState } from 'react';
+import { GoogleAuthProvider, signInWithCredential } from '@react-native-firebase/auth';
+import { GoogleSignin, isSuccessResponse, statusCodes } from '@react-native-google-signin/google-signin';
 
-import { supabase } from '@/lib/supabase';
+import { auth, isFirebaseConfigured } from '@/lib/firebase';
 
-WebBrowser.maybeCompleteAuthSession();
+const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 
-// expo-auth-session throws during render if the platform-relevant client id
-// is missing, so we feed it a placeholder to keep the hook safe to call
-// unconditionally and gate real availability ourselves via `isAvailable`.
-const PLACEHOLDER_CLIENT_ID = 'not-configured';
+if (isFirebaseConfigured && webClientId) {
+  GoogleSignin.configure({ webClientId });
+}
 
 /**
- * Google OAuth via expo-auth-session, exchanging the returned id_token with
- * Supabase Auth. Requires EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID /
- * EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID / EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID
- * from a Google Cloud OAuth client (see .env.example) — until those are set
- * `isAvailable` stays false and the button should be disabled.
+ * Google sign-in via the native Google SDK, exchanging the returned ID
+ * token with Firebase. Requires EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID (the "Web
+ * client" OAuth client Firebase creates automatically once Google sign-in
+ * is enabled) — until that's set, `isAvailable` stays false.
  */
 export function useGoogleSignIn(onError: (error: Error) => void) {
-  const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-  const androidClientId = process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-  const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+  const [loading, setLoading] = useState(false);
 
-  const configuredClientId = Platform.select({
-    ios: iosClientId,
-    android: androidClientId,
-    default: webClientId,
-  });
+  const promptAsync = useCallback(async () => {
+    if (!auth || !webClientId) return;
+    setLoading(true);
+    try {
+      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      const response = await GoogleSignin.signIn();
+      if (!isSuccessResponse(response) || !response.data.idToken) return;
 
-  const [request, response, promptAsync] = Google.useAuthRequest({
-    iosClientId: iosClientId ?? PLACEHOLDER_CLIENT_ID,
-    androidClientId: androidClientId ?? PLACEHOLDER_CLIENT_ID,
-    webClientId: webClientId ?? PLACEHOLDER_CLIENT_ID,
-  });
-
-  useEffect(() => {
-    if (response?.type !== 'success') return;
-    const idToken = response.authentication?.idToken;
-    if (!idToken || !supabase) return;
-
-    supabase.auth.signInWithIdToken({ provider: 'google', token: idToken }).then(({ error }) => {
-      if (error) onError(error);
-    });
-  }, [response, onError]);
+      const credential = GoogleAuthProvider.credential(response.data.idToken);
+      await signInWithCredential(auth, credential);
+    } catch (err) {
+      if (err instanceof Error && (err as { code?: string }).code === statusCodes.SIGN_IN_CANCELLED) return;
+      onError(err instanceof Error ? err : new Error('Google sign-in failed.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [onError]);
 
   return {
-    isAvailable: Boolean(request) && Boolean(configuredClientId),
+    isAvailable: Boolean(auth && webClientId),
+    loading,
     promptAsync,
   };
 }

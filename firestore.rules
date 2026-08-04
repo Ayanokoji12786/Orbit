@@ -1,0 +1,72 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // ---------------- users ----------------
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow create, update: if isSelf(uid);
+    }
+
+    // ---------------- contacts (per-owner subcollection) ----------------
+    match /contacts/{ownerUid}/items/{contactUid} {
+      allow read, write: if isSelf(ownerUid);
+    }
+
+    // ---------------- meetings ----------------
+    // Title/time are discoverable by anyone signed in (needed for join-by-code).
+    // The password hash never lives here — see meetingSecrets below.
+    match /meetings/{meetingId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.hostId == request.auth.uid;
+
+      match /participants/{uid} {
+        allow read: if isSignedIn();
+        allow create, update: if isSelf(uid);
+      }
+
+      match /polls/{pollId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+        // Voting only ever touches the votes map + option tallies.
+        allow update: if isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes', 'options']);
+      }
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // Never readable or writable from a client — only the livekit-token Cloud
+    // Function (Admin SDK, bypasses rules) touches this.
+    match /meetingSecrets/{meetingId} {
+      allow read, write: if false;
+    }
+
+    // ---------------- conversations (1:1 DMs — meeting chat lives under meetings/{id}/messages) ----------------
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participantIds;
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participantIds;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+        allow create: if isSignedIn()
+          && request.resource.data.senderId == request.auth.uid
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+      }
+    }
+  }
+}

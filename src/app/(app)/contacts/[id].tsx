@@ -1,23 +1,41 @@
-import { ScrollView, View } from 'react-native';
+import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { AppText, Avatar, IconButton, SectionHeader } from '@/components/ui';
+import { AppText, Avatar, IconButton } from '@/components/ui';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { useAppTheme } from '@/design-system/useAppTheme';
-import { mockContacts, mockRecentMeetings } from '@/features/home/mock-data';
-import { MeetingRow } from '@/features/meetings/components/MeetingRow';
+import { useContacts } from '@/features/contacts/api';
 
 export default function ContactDetail() {
   const { colors, spacing } = useAppTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const contact = mockContacts.find((c) => c.id === id) ?? mockContacts[0];
-  const history = mockRecentMeetings.filter((m) => m.participants.some((p) => p.id === contact.id));
+  const { contacts, loading } = useContacts();
+  const contact = contacts.find((c) => c.id === id);
+
+  if (loading && !contact) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!contact) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background }}>
+        <ScreenHeader title="Contact" />
+        <AppText variant="body" color="textSecondary" style={{ textAlign: 'center', marginTop: spacing.xxl }}>
+          Contact not found.
+        </AppText>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScreenHeader title={contact.name} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.lg, alignItems: 'center' }}>
-        <Avatar name={contact.name} size={88} status={contact.status} />
+        <Avatar name={contact.name} uri={contact.avatarUrl} size={88} status={contact.status} />
         <AppText variant="title" style={{ marginTop: spacing.md }}>
           {contact.name}
         </AppText>
@@ -41,25 +59,8 @@ export default function ContactDetail() {
             accessibilityLabel="Message"
             onPress={() => router.push(`/chat/${contact.id}`)}
           />
-          <IconButton
-            name="call"
-            variant="filled"
-            size={54}
-            accessibilityLabel="Audio call"
-            onPress={() => {}}
-          />
+          <IconButton name="call" variant="filled" size={54} accessibilityLabel="Audio call" onPress={() => {}} />
         </View>
-
-        {history.length > 0 && (
-          <View style={{ width: '100%', marginTop: spacing.xxl }}>
-            <SectionHeader title="Meeting history" />
-            <View style={{ gap: spacing.sm }}>
-              {history.map((meeting) => (
-                <MeetingRow key={meeting.id} meeting={meeting} onPress={() => router.push(`/meetings/${meeting.id}`)} />
-              ))}
-            </View>
-          </View>
-        )}
       </ScrollView>
     </View>
   );

@@ -10,6 +10,8 @@ export type MeetingParticipant = Pick<Contact, 'id' | 'name' | 'avatarUrl'>;
 
 export type Meeting = {
   id: string;
+  hostId: string;
+  roomCode: string;
   title: string;
   startsAt: string;
   durationMinutes: number;

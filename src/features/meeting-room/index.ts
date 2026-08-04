@@ -1,6 +1,7 @@
 export * from './ChatPanel';
 export * from './ControlBar';
 export * from './FloatingReaction';
+export * from './LiveRoom';
 export * from './MoreSheet';
 export * from './ParticipantsSheet';
 export * from './PollsPanel';
