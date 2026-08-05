@@ -69,11 +69,14 @@ export async function addContactByEmail(email: string): Promise<AddContactResult
   if (!uid) throw new Error('Sign in required.');
 
   const normalized = email.trim().toLowerCase();
-  const { data: user } = await supabase.from('users').select('id').eq('email', normalized).maybeSingle();
-  if (!user) return 'not-found';
-  if (user.id === uid) return 'self';
+  // Routed through an RPC — the users table is no longer world-readable, only self +
+  // contacts, so a direct table lookup can't find someone before they're a contact.
+  const { data: matches } = await supabase.rpc('find_user_by_email', { p_email: normalized });
+  const match = matches?.[0];
+  if (!match) return 'not-found';
+  if (match.id === uid) return 'self';
 
-  const { error } = await supabase.from('contacts').insert({ owner_id: uid, contact_id: user.id, is_favorite: false });
+  const { error } = await supabase.from('contacts').insert({ owner_id: uid, contact_id: match.id, is_favorite: false });
   if (error) {
     if (error.code === '23505') return 'exists'; // unique_violation on the (owner_id, contact_id) PK
     throw error;

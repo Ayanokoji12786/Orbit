@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
+import * as Crypto from 'expo-crypto';
 
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 import type { Meeting } from '@/types/domain';
 
+const ROOM_CODE_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz';
+
 function randomRoomCode() {
-  return Math.random().toString(36).slice(2, 8);
+  const bytes = Crypto.getRandomBytes(6);
+  return Array.from(bytes, (b) => ROOM_CODE_ALPHABET[b % ROOM_CODE_ALPHABET.length]).join('');
 }
 
 type MeetingRow = {

@@ -56,6 +56,7 @@ export function ChatInput({ onSendText, onSendImage, forceDark }: Props) {
         placeholder="Message"
         placeholderTextColor={colors.textTertiary}
         multiline
+        maxLength={4000}
         style={{
           flex: 1,
           maxHeight: 100,

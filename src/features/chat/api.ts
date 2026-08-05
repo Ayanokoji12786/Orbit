@@ -58,12 +58,11 @@ export function useDmMessages(otherUid: string | undefined): ChatApi {
   const conversationId = uid && otherUid ? dmConversationId(uid, otherUid) : null;
 
   useEffect(() => {
-    if (!supabase || !uid || !otherUid || !conversationId) return;
-    supabase
-      .from('conversations')
-      .upsert({ id: conversationId, kind: 'dm', participant_ids: [uid, otherUid].sort() }, { ignoreDuplicates: true })
-      .then();
-  }, [uid, otherUid, conversationId]);
+    if (!supabase || !uid || !otherUid) return;
+    // Routed through an RPC (rather than a direct upsert) so the row can only ever be
+    // created "as" the caller — see get_or_create_dm_conversation in the security migration.
+    supabase.rpc('get_or_create_dm_conversation', { p_other_user_id: otherUid }).then();
+  }, [uid, otherUid]);
 
   useEffect(() => {
     if (!supabase || !conversationId) {

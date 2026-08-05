@@ -39,6 +39,13 @@ Deno.serve(async (req) => {
     const displayName =
       (userData.user.user_metadata?.full_name as string | undefined) ?? userData.user.email ?? 'Guest';
 
+    const { data: allowed } = await userClient.rpc('check_rate_limit', {
+      p_bucket: 'livekit-token',
+      p_max_calls: 30,
+      p_window_minutes: 10,
+    });
+    if (!allowed) return json({ error: 'Too many attempts. Try again in a few minutes.' }, 429);
+
     const { roomCode, password } = (await req.json()) as { roomCode?: string; password?: string };
     const trimmedCode = roomCode?.trim();
     if (!trimmedCode) return json({ error: 'roomCode is required.' }, 400);
