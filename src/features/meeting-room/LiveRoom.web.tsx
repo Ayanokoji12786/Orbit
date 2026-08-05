@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Avatar, IconButton } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 
+import { AiAssistantPanel } from './AiAssistantPanel';
 import { ChatPanel } from './ChatPanel';
 import { ControlBar } from './ControlBar';
 import { FloatingReaction } from './FloatingReaction';
@@ -17,7 +18,7 @@ import { ParticipantsSheet } from './ParticipantsSheet';
 import { PollsPanel } from './PollsPanel';
 import { WhiteboardOverlay } from './WhiteboardOverlay';
 
-type Panel = 'chat' | 'whiteboard' | 'polls' | 'participants' | 'more' | null;
+type Panel = 'chat' | 'whiteboard' | 'polls' | 'participants' | 'more' | 'ai' | null;
 
 type Props = {
   roomCode: string;
@@ -29,6 +30,7 @@ export function LiveRoom({ roomCode }: Props) {
   const insets = useSafeAreaInsets();
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(true);
+  const [screenSharing, setScreenSharing] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [reactions, setReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
 
@@ -130,11 +132,21 @@ export function LiveRoom({ roomCode }: Props) {
           { icon: 'chatbubble-outline', label: 'Chat', onPress: () => setPanel('chat') },
           { icon: 'brush-outline', label: 'Whiteboard', onPress: () => setPanel('whiteboard') },
           { icon: 'stats-chart-outline', label: 'Polls', onPress: () => setPanel('polls') },
+          { icon: 'sparkles-outline', label: 'AI Assistant', onPress: () => setPanel('ai') },
+          {
+            icon: screenSharing ? 'stop-circle-outline' : 'desktop-outline',
+            label: screenSharing ? 'Stop sharing' : 'Share screen',
+            onPress: () => {
+              setPanel(null);
+              setScreenSharing((s) => !s);
+            },
+          },
           { icon: 'hand-left-outline', label: 'Raise hand', onPress: () => setPanel(null) },
         ]}
       />
       <ChatPanel visible={panel === 'chat'} onClose={() => setPanel(null)} meetingId={roomCode} />
       <PollsPanel visible={panel === 'polls'} onClose={() => setPanel(null)} meetingId={roomCode} />
+      <AiAssistantPanel visible={panel === 'ai'} onClose={() => setPanel(null)} meetingTitle={roomCode} />
       <ParticipantsSheet visible={panel === 'participants'} onClose={() => setPanel(null)} participants={tiles} />
       <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} />
     </View>

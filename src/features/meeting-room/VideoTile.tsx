@@ -8,18 +8,19 @@ import { useAppTheme } from '@/design-system/useAppTheme';
 type Props = {
   name: string;
   trackRef?: TrackReference;
-  muted: boolean;
+  muted?: boolean;
   isSpeaking?: boolean;
+  fullWidth?: boolean;
 };
 
-export function VideoTile({ name, trackRef, muted, isSpeaking }: Props) {
+export function VideoTile({ name, trackRef, muted, isSpeaking, fullWidth }: Props) {
   const { radii } = useAppTheme();
 
   return (
     <View
       style={{
-        width: '48%',
-        aspectRatio: 3 / 4,
+        width: fullWidth ? '100%' : '48%',
+        aspectRatio: fullWidth ? 16 / 9 : 3 / 4,
         borderRadius: radii.lg,
         backgroundColor: '#161618',
         alignItems: 'center',

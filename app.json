@@ -21,7 +21,9 @@
         "NSMicrophoneUsageDescription": "Orbit uses your microphone so other participants can hear you on video and audio calls.",
         "UIBackgroundModes": [
           "voip"
-        ]
+        ],
+        "RTCAppGroupIdentifier": "group.app.orbit.mobile",
+        "RTCScreenSharingExtension": "app.orbit.mobile.broadcast"
       }
     },
     "android": {
@@ -37,7 +39,9 @@
         "CAMERA",
         "RECORD_AUDIO",
         "MODIFY_AUDIO_SETTINGS",
-        "BLUETOOTH"
+        "BLUETOOTH",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MEDIA_PROJECTION"
       ]
     },
     "web": {
@@ -69,7 +73,14 @@
           "color": "#5B5FFF"
         }
       ],
-      "@livekit/react-native-expo-plugin",
+      [
+        "@livekit/react-native-expo-plugin",
+        {
+          "android": {
+            "enableScreenShareService": true
+          }
+        }
+      ],
       "@react-native-google-signin/google-signin"
     ],
     "experiments": {

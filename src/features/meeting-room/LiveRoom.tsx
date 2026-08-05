@@ -2,17 +2,28 @@ import { registerGlobals } from '@livekit/react-native';
 
 registerGlobals();
 
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentType, type ElementRef, type Ref } from 'react';
+import { ActivityIndicator, findNodeHandle, NativeModules, Platform, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiveKitRoom, useLocalParticipant, useRemoteParticipants } from '@livekit/react-native';
+import { ScreenCapturePickerView } from '@livekit/react-native-webrtc';
+
+// The library types this as HostComponent<unknown> — no props at all, even though the
+// underlying native view does accept standard style props. Cast once here instead of
+// suppressing the error at every usage site; the ref type is preserved from the original.
+type ScreenCapturePickerViewRef = ElementRef<typeof ScreenCapturePickerView>;
+const TypedScreenCapturePickerView = ScreenCapturePickerView as ComponentType<{
+  ref?: Ref<ScreenCapturePickerViewRef>;
+  style?: StyleProp<ViewStyle>;
+}>;
 
 import { AppText, IconButton, PressableScale } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { fetchLiveKitToken, type LiveKitJoinInfo } from '@/lib/livekit';
 
+import { AiAssistantPanel } from './AiAssistantPanel';
 import { ChatPanel } from './ChatPanel';
 import { ControlBar } from './ControlBar';
 import { FloatingReaction } from './FloatingReaction';
@@ -22,7 +33,7 @@ import { PollsPanel } from './PollsPanel';
 import { VideoGrid } from './VideoGrid';
 import { WhiteboardOverlay } from './WhiteboardOverlay';
 
-type Panel = 'chat' | 'whiteboard' | 'polls' | 'participants' | 'more' | null;
+type Panel = 'chat' | 'whiteboard' | 'polls' | 'participants' | 'more' | 'ai' | null;
 
 type Props = {
   roomCode: string;
@@ -67,15 +78,24 @@ export function LiveRoom({ roomCode, password }: Props) {
 function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTitle: string }) {
   const { spacing } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
   const [panel, setPanel] = useState<Panel>(null);
   const [reactions, setReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
+  const screenSharePickerRef = useRef<ScreenCapturePickerViewRef>(null);
 
   const spawnReaction = (emoji: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const x = 40 + Math.random() * 220;
     setReactions((current) => [...current, { id, emoji, x }]);
+  };
+
+  const toggleScreenShare = async () => {
+    if (!isScreenShareEnabled && Platform.OS === 'ios') {
+      const reactTag = findNodeHandle(screenSharePickerRef.current);
+      if (reactTag) NativeModules.ScreenCapturePickerViewManager.show(reactTag);
+    }
+    await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
   };
 
   const participants = [
@@ -85,6 +105,9 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
+      {Platform.OS === 'ios' && (
+        <TypedScreenCapturePickerView ref={screenSharePickerRef} style={{ width: 1, height: 1, opacity: 0, position: 'absolute' }} />
+      )}
       <View
         style={{
           position: 'absolute',
@@ -149,11 +172,21 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
           { icon: 'chatbubble-outline', label: 'Chat', onPress: () => setPanel('chat') },
           { icon: 'brush-outline', label: 'Whiteboard', onPress: () => setPanel('whiteboard') },
           { icon: 'stats-chart-outline', label: 'Polls', onPress: () => setPanel('polls') },
+          { icon: 'sparkles-outline', label: 'AI Assistant', onPress: () => setPanel('ai') },
+          {
+            icon: isScreenShareEnabled ? 'stop-circle-outline' : 'desktop-outline',
+            label: isScreenShareEnabled ? 'Stop sharing' : 'Share screen',
+            onPress: () => {
+              setPanel(null);
+              toggleScreenShare();
+            },
+          },
           { icon: 'hand-left-outline', label: 'Raise hand', onPress: () => setPanel(null) },
         ]}
       />
       <ChatPanel visible={panel === 'chat'} onClose={() => setPanel(null)} meetingId={meetingId} />
       <PollsPanel visible={panel === 'polls'} onClose={() => setPanel(null)} meetingId={meetingId} />
+      <AiAssistantPanel visible={panel === 'ai'} onClose={() => setPanel(null)} meetingTitle={meetingTitle} />
       <ParticipantsSheet visible={panel === 'participants'} onClose={() => setPanel(null)} participants={participants} />
       <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} />
     </View>

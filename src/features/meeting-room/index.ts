@@ -1,3 +1,4 @@
+export * from './AiAssistantPanel';
 export * from './ChatPanel';
 export * from './ControlBar';
 export * from './FloatingReaction';
