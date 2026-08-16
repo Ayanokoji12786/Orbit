@@ -1,4 +1,4 @@
-import { View } from 'react-native';
+import { KeyboardAvoidingView, Platform, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,10 +15,15 @@ export default function DmChat() {
   const { contacts } = useContacts();
   const contact = contacts.find((c) => c.id === contactId);
 
-  const { messages, sendText, sendImage } = useDmMessages(contactId);
+  const { messages, error, sendText, sendImage } = useDmMessages(contactId);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    // This screen is a normal full-height view, so KeyboardAvoidingView measures correctly
+    // here; offset 0 because the view already starts at the top of the screen.
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: colors.background }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={0}>
       <View
         style={{
           paddingTop: insets.top + spacing.sm,
@@ -44,6 +49,14 @@ export default function DmChat() {
         />
       </View>
 
+      {error && (
+        <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.xs }}>
+          <AppText variant="caption" color="error">
+            {error}
+          </AppText>
+        </View>
+      )}
+
       <ChatThread
         messages={messages}
         showSenderNames={false}
@@ -51,6 +64,6 @@ export default function DmChat() {
         onSendText={sendText}
         onSendImage={sendImage}
       />
-    </View>
+    </KeyboardAvoidingView>
   );
 }

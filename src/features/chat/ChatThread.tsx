@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { FlatList, View } from 'react-native';
 
 import type { ChatMessage } from '@/types/domain';
 
@@ -26,11 +26,12 @@ export function ChatThread({
 }: Props) {
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
+  // Deliberately no KeyboardAvoidingView here: this renders both inside a BottomSheet
+  // (which now lifts itself by the real keyboard height) and inside the standalone DM
+  // screen (which wraps this in its own correctly-measured KAV). Having one here too
+  // double-counted the offset and pushed the input off-screen.
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
+    <View style={{ flex: 1 }}>
       <FlatList
         ref={listRef}
         data={messages}
@@ -41,6 +42,6 @@ export function ChatThread({
       />
       <ChatInput onSendText={onSendText} onSendImage={onSendImage} forceDark={forceDark} />
       <View style={{ height: bottomInset }} />
-    </KeyboardAvoidingView>
+    </View>
   );
 }

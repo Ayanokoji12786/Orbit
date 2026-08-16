@@ -26,20 +26,27 @@ export function FloatingReaction({ emoji, startX, onDone }: Props) {
   // Runs once: each instance is a short-lived, uniquely-keyed reaction that
   // plays its animation exactly once and then unmounts via onDone.
   useEffect(() => {
-    scale.value = withSpring(1, { damping: 8 });
-    translateY.value = withTiming(-360, { duration: 2200, easing: Easing.out(Easing.quad) });
-    translateX.value = withRepeat(withTiming(16, { duration: 550, easing: Easing.inOut(Easing.sin) }), 3, true);
-    opacity.value = withDelay(
-      1500,
-      withTiming(0, { duration: 600 }, (finished) => {
-        if (finished) runOnJS(onDone)();
-      }),
+    // `.set()`/`.get()` accessors rather than `.value` — React Compiler (enabled in
+    // app.json) treats the assignment form as mutating a captured value.
+    scale.set(withSpring(1, { damping: 8 }));
+    translateY.set(withTiming(-360, { duration: 2200, easing: Easing.out(Easing.quad) }));
+    translateX.set(withRepeat(withTiming(16, { duration: 550, easing: Easing.inOut(Easing.sin) }), 3, true));
+    opacity.set(
+      withDelay(
+        1500,
+        withTiming(0, { duration: 600 }, () => {
+          // Fire regardless of `finished`: an interrupted animation (backgrounding,
+          // reduce-motion, unmount race) would otherwise leave this reaction in the
+          // parent's list forever, accumulating invisible mounted views for the call.
+          runOnJS(onDone)();
+        }),
+      ),
     );
   }, []);
 
   const style = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }, { translateX: translateX.value }, { scale: scale.value }],
-    opacity: opacity.value,
+    transform: [{ translateY: translateY.get() }, { translateX: translateX.get() }, { scale: scale.get() }],
+    opacity: opacity.get(),
   }));
 
   return (

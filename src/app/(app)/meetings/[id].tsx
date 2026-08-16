@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { AppText, Avatar, Button, Chip, EmptyState } from '@/components/ui';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { useAppTheme } from '@/design-system/useAppTheme';
+import { useNow } from '@/hooks/use-now';
 import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/api';
 import { formatClockTime, formatCountdown } from '@/utils/datetime';
 
@@ -13,6 +14,7 @@ export default function MeetingDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const upcoming = useUpcomingMeetings();
   const past = usePastMeetings();
+  const now = useNow();
   const meeting = [...upcoming, ...past].find((m) => m.id === id);
 
   if (!meeting) {
@@ -26,7 +28,7 @@ export default function MeetingDetail() {
     );
   }
 
-  const isUpcoming = new Date(meeting.startsAt).getTime() > Date.now();
+  const isUpcoming = new Date(meeting.startsAt).getTime() > now;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>

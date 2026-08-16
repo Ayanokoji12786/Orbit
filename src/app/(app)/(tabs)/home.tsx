@@ -12,10 +12,11 @@ import { QuickActions } from '@/features/home/QuickActions';
 import { UpcomingMeetingCard } from '@/features/home/UpcomingMeetingCard';
 import { MeetingRow } from '@/features/meetings/components/MeetingRow';
 import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/api';
+import { useNow } from '@/hooks/use-now';
 import { useAuthStore } from '@/stores/auth-store';
 
-function greeting(): string {
-  const hour = new Date().getHours();
+function greeting(now: number): string {
+  const hour = new Date(now).getHours();
   if (hour < 12) return 'Good morning';
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
@@ -24,6 +25,7 @@ function greeting(): string {
 export default function Home() {
   const { spacing } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const now = useNow();
   const email = useAuthStore((s) => s.email);
   const displayName = email ? email.split('@')[0] : 'there';
   const upcoming = useUpcomingMeetings();
@@ -44,7 +46,7 @@ export default function Home() {
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View>
           <AppText variant="caption" color="textSecondary">
-            {greeting()}
+            {greeting(now)}
           </AppText>
           <AppText variant="displayMedium" style={{ textTransform: 'capitalize' }}>
             {displayName}

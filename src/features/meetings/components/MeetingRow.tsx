@@ -2,6 +2,7 @@ import { View } from 'react-native';
 
 import { AppText, Avatar, PressableScale } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
+import { useNow } from '@/hooks/use-now';
 import type { Meeting } from '@/types/domain';
 import { formatClockTime, formatRelativeDay } from '@/utils/datetime';
 
@@ -12,7 +13,8 @@ type Props = {
 
 export function MeetingRow({ meeting, onPress }: Props) {
   const { colors, spacing, radii } = useAppTheme();
-  const isPast = new Date(meeting.startsAt).getTime() < Date.now();
+  const now = useNow();
+  const isPast = new Date(meeting.startsAt).getTime() < now;
 
   return (
     <PressableScale

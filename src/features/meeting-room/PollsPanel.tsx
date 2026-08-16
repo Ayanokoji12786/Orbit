@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, TextInput, View } from 'react-native';
 
 import { AppText, BottomSheet, Button, EmptyState, IconButton } from '@/components/ui';
@@ -9,12 +9,19 @@ import { useMeetingPolls } from './polls-api';
 type Props = {
   visible: boolean;
   onClose: () => void;
-  meetingId: string;
+  /** Undefined until the meeting is resolved; the hook renders an empty list until then. */
+  meetingId: string | undefined;
 };
 
 export function PollsPanel({ visible, onClose, meetingId }: Props) {
-  const { polls, createPoll, vote } = useMeetingPolls(meetingId);
+  const { polls, error, createPoll, vote } = useMeetingPolls(meetingId);
   const [creating, setCreating] = useState(false);
+
+  // BottomSheet unmounts its children when hidden but this panel stays mounted, so
+  // without this you reopen Polls into a half-filled create form instead of the list.
+  useEffect(() => {
+    if (!visible) setCreating(false);
+  }, [visible]);
 
   return (
     <BottomSheet
@@ -36,6 +43,14 @@ export function PollsPanel({ visible, onClose, meetingId }: Props) {
         </AppText>
         {!creating && <IconButton name="add" variant="filled" accessibilityLabel="Create poll" onPress={() => setCreating(true)} />}
       </View>
+
+      {error && (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+          <AppText variant="caption" color="error">
+            {error}
+          </AppText>
+        </View>
+      )}
 
       {creating ? (
         <CreatePollForm
@@ -84,8 +99,12 @@ function CreatePollForm({
     }
   };
 
+  // Scrollable: with 4 options plus the buttons this overflows the sheet, and the
+  // keyboard covers the later fields and Create.
   return (
-    <View style={{ paddingHorizontal: 16, gap: 12 }}>
+    <ScrollView
+      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24, gap: 12 }}
+      keyboardShouldPersistTaps="handled">
       <TextInput
         value={question}
         onChangeText={setQuestion}
@@ -114,7 +133,7 @@ function CreatePollForm({
           <Button label="Create" disabled={!canCreate} loading={submitting} onPress={submit} />
         </View>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 

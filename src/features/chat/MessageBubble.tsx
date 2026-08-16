@@ -4,7 +4,10 @@ import { Image } from 'expo-image';
 import { AppText } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { dark as darkColors } from '@/design-system/tokens/colors';
+import { useAuthStore } from '@/stores/auth-store';
 import type { ChatMessage } from '@/types/domain';
+
+import { useSignedImageUrl } from './useSignedImageUrl';
 
 type Props = {
   message: ChatMessage;
@@ -17,7 +20,12 @@ export function MessageBubble({ message, showSender, forceDark }: Props) {
   const theme = useAppTheme();
   const colors = forceDark ? darkColors : theme.colors;
   const { radii, spacing } = theme;
-  const isOwn = message.senderId === 'me';
+  // Left over from the mock-data era: sender ids are real user UUIDs now, so comparing
+  // against the literal 'me' was always false and every message — including your own —
+  // rendered as an incoming message.
+  const uid = useAuthStore((s) => s.uid);
+  const isOwn = Boolean(uid) && message.senderId === uid;
+  const imageUrl = useSignedImageUrl(message.imageUri);
   const time = new Date(message.createdAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
   return (
@@ -36,9 +44,7 @@ export function MessageBubble({ message, showSender, forceDark }: Props) {
           backgroundColor: isOwn ? colors.primary : colors.surfaceElevated,
           overflow: 'hidden',
         }}>
-        {message.imageUri && (
-          <Image source={{ uri: message.imageUri }} style={{ width: 220, height: 220 }} contentFit="cover" />
-        )}
+        {imageUrl && <Image source={{ uri: imageUrl }} style={{ width: 220, height: 220 }} contentFit="cover" />}
         {message.text && (
           <AppText
             variant="body"

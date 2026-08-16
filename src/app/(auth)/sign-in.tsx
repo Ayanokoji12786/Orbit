@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react';
-import { Platform, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { TextInput, View } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +18,23 @@ export default function SignIn() {
 
   const onAuthError = useCallback((err: Error) => setError(err.message), []);
   const google = useGoogleSignIn(onAuthError);
+
+  // Gating on Platform.OS alone showed the button on any iOS build, including ones
+  // without the Sign in with Apple entitlement — where tapping it just throws.
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    AppleAuthentication.isAvailableAsync()
+      .then((available) => {
+        if (!cancelled) setAppleAvailable(available);
+      })
+      .catch(() => {
+        if (!cancelled) setAppleAvailable(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
@@ -68,7 +85,7 @@ export default function SignIn() {
         </AppText>
 
         <View style={{ marginTop: spacing.xxl, gap: spacing.md }}>
-          {Platform.OS === 'ios' && (
+          {appleAvailable && (
             <AppleAuthentication.AppleAuthenticationButton
               buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
               buttonStyle={

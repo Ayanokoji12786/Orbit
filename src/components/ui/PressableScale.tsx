@@ -36,7 +36,7 @@ export function PressableScale({
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{ scale: scale.get() }],
   }));
 
   const triggerHaptic = () => {
@@ -53,10 +53,13 @@ export function PressableScale({
     <AnimatedPressable
       disabled={disabled}
       onPressIn={() => {
-        scale.value = withTiming(scaleTo, { duration: duration.fast });
+        // `.set()` rather than `.value =` — React Compiler (enabled in app.json) treats
+        // the assignment as mutating a captured value and bails out of optimizing this
+        // component, which is the most heavily used one in the app.
+        scale.set(withTiming(scaleTo, { duration: duration.fast }));
       }}
       onPressOut={() => {
-        scale.value = withTiming(1, { duration: duration.fast });
+        scale.set(withTiming(1, { duration: duration.fast }));
       }}
       onPress={() => {
         triggerHaptic();

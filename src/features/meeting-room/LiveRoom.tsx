@@ -46,6 +46,11 @@ export function LiveRoom({ roomCode, password }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    // Reset both, or switching rooms keeps the previous room's token connected and — because
+    // the error branch below short-circuits — a single failed join makes every later room
+    // render that stale error screen.
+    setJoinInfo(null);
+    setError(null);
     fetchLiveKitToken(roomCode, password)
       .then((info) => {
         if (!cancelled) setJoinInfo(info);
@@ -70,7 +75,8 @@ export function LiveRoom({ roomCode, password }: Props) {
       connect
       onDisconnected={() => router.back()}
       onError={(err) => setError(err.message)}>
-      <RoomContent meetingId={joinInfo.roomName} meetingTitle={joinInfo.meetingTitle} />
+      {/* Keyed so panels, reactions, chat and the AI conversation don't carry into a new meeting. */}
+      <RoomContent key={joinInfo.roomName} meetingId={joinInfo.roomName} meetingTitle={joinInfo.meetingTitle} />
     </LiveKitRoom>
   );
 }
@@ -90,12 +96,26 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
     setReactions((current) => [...current, { id, emoji, x }]);
   };
 
+  const [screenShareError, setScreenShareError] = useState<string | null>(null);
+
   const toggleScreenShare = async () => {
-    if (!isScreenShareEnabled && Platform.OS === 'ios') {
-      const reactTag = findNodeHandle(screenSharePickerRef.current);
-      if (reactTag) NativeModules.ScreenCapturePickerViewManager.show(reactTag);
+    setScreenShareError(null);
+    try {
+      if (!isScreenShareEnabled && Platform.OS === 'ios') {
+        // Absent in Expo Go and in dev clients built without the LiveKit plugin —
+        // reaching straight for `.show` there throws "undefined is not an object".
+        const picker = NativeModules.ScreenCapturePickerViewManager;
+        const reactTag = findNodeHandle(screenSharePickerRef.current);
+        if (!picker?.show || !reactTag) {
+          throw new Error('Screen sharing needs a development build with the LiveKit plugin.');
+        }
+        picker.show(reactTag);
+      }
+      await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
+    } catch (err) {
+      // Also covers the user dismissing the ReplayKit picker, which rejects.
+      setScreenShareError(err instanceof Error ? err.message : 'Could not start screen sharing.');
     }
-    await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
   };
 
   const participants = [
@@ -153,6 +173,23 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
         />
       ))}
 
+      {screenShareError && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 40 + 76,
+            left: spacing.lg,
+            right: spacing.lg,
+            alignItems: 'center',
+          }}>
+          <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 }}>
+            <AppText variant="caption" color="error" style={{ textAlign: 'center' }}>
+              {screenShareError}
+            </AppText>
+          </View>
+        </View>
+      )}
+
       <View style={{ position: 'absolute', bottom: 40, left: spacing.lg, right: spacing.lg }}>
         <ControlBar
           muted={!isMicrophoneEnabled}
@@ -178,7 +215,8 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
             label: isScreenShareEnabled ? 'Stop sharing' : 'Share screen',
             onPress: () => {
               setPanel(null);
-              toggleScreenShare();
+              // toggleScreenShare handles its own errors; void marks the floating promise deliberate.
+              void toggleScreenShare();
             },
           },
           { icon: 'hand-left-outline', label: 'Raise hand', onPress: () => setPanel(null) },

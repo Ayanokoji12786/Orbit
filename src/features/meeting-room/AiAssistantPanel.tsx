@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { FlatList, KeyboardAvoidingView, Platform, TextInput, View } from 'react-native';
+import { FlatList, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { AppText, BottomSheet, EmptyState, PressableScale } from '@/components/ui';
@@ -26,7 +26,10 @@ export function AiAssistantPanel({ visible, onClose, meetingTitle }: Props) {
           AI Assistant
         </AppText>
       </View>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+      {/* No KeyboardAvoidingView: BottomSheet lifts itself by the real keyboard height.
+          A KAV here measured against the sheet's parent-relative frame and under-padded,
+          leaving this input behind the keyboard. */}
+      <View style={{ flex: 1 }}>
         {messages.length === 0 ? (
           <EmptyState icon="sparkles-outline" title="Ask me anything" subtitle="Quick answers, summaries, or notes during your call." />
         ) : (
@@ -74,7 +77,7 @@ export function AiAssistantPanel({ visible, onClose, meetingTitle }: Props) {
           </PressableScale>
         </View>
         <View style={{ height: 8 }} />
-      </KeyboardAvoidingView>
+      </View>
     </BottomSheet>
   );
 }

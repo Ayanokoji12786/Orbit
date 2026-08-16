@@ -1,13 +1,14 @@
 // @livekit/react-native has no web implementation. This preview keeps the
 // room's visual design and panels testable in a browser without a real
 // video connection — real calling only ever runs on iOS/Android.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, Avatar, IconButton } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
+import { fetchLiveKitToken, type LiveKitJoinInfo } from '@/lib/livekit';
 
 import { AiAssistantPanel } from './AiAssistantPanel';
 import { ChatPanel } from './ChatPanel';
@@ -25,7 +26,7 @@ type Props = {
   password?: string;
 };
 
-export function LiveRoom({ roomCode }: Props) {
+export function LiveRoom({ roomCode, password }: Props) {
   const { spacing, radii } = useAppTheme();
   const insets = useSafeAreaInsets();
   const [muted, setMuted] = useState(false);
@@ -33,6 +34,26 @@ export function LiveRoom({ roomCode }: Props) {
   const [screenSharing, setScreenSharing] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const [reactions, setReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
+  const [joinInfo, setJoinInfo] = useState<LiveKitJoinInfo | null>(null);
+
+  // The panels key off the meeting's UUID, not the room code — passing the code made
+  // every chat/poll query fail as an invalid uuid, silently, so web showed empty panels
+  // and dropped every message. The token endpoint is a plain edge function, so it works
+  // here even though the LiveKit SDK itself has no web build.
+  useEffect(() => {
+    let cancelled = false;
+    setJoinInfo(null);
+    fetchLiveKitToken(roomCode, password)
+      .then((info) => {
+        if (!cancelled) setJoinInfo(info);
+      })
+      .catch(() => {
+        // Preview-only: panels stay disabled below rather than showing an error screen.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomCode, password]);
 
   const spawnReaction = (emoji: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -144,9 +165,13 @@ export function LiveRoom({ roomCode }: Props) {
           { icon: 'hand-left-outline', label: 'Raise hand', onPress: () => setPanel(null) },
         ]}
       />
-      <ChatPanel visible={panel === 'chat'} onClose={() => setPanel(null)} meetingId={roomCode} />
-      <PollsPanel visible={panel === 'polls'} onClose={() => setPanel(null)} meetingId={roomCode} />
-      <AiAssistantPanel visible={panel === 'ai'} onClose={() => setPanel(null)} meetingTitle={roomCode} />
+      <ChatPanel visible={panel === 'chat'} onClose={() => setPanel(null)} meetingId={joinInfo?.roomName} />
+      <PollsPanel visible={panel === 'polls'} onClose={() => setPanel(null)} meetingId={joinInfo?.roomName} />
+      <AiAssistantPanel
+        visible={panel === 'ai'}
+        onClose={() => setPanel(null)}
+        meetingTitle={joinInfo?.meetingTitle ?? roomCode}
+      />
       <ParticipantsSheet visible={panel === 'participants'} onClose={() => setPanel(null)} participants={tiles} />
       <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} />
     </View>
