@@ -39,12 +39,19 @@ Deno.serve(async (req) => {
     const displayName =
       (userData.user.user_metadata?.full_name as string | undefined) ?? userData.user.email ?? 'Guest';
 
-    const { data: allowed } = await userClient.rpc('check_rate_limit', {
+    // Destructure the error: without it any RPC failure yields data === null, which
+    // reads as "not allowed" and 429s every request with a misleading message.
+    const { data: allowed, error: rateErr } = await userClient.rpc('check_rate_limit', {
       p_bucket: 'livekit-token',
       p_max_calls: 30,
       p_window_minutes: 10,
     });
-    if (!allowed) return json({ error: 'Too many attempts. Try again in a few minutes.' }, 429);
+    if (rateErr) {
+      // Fail open — a limiter outage shouldn't lock everyone out of their meetings.
+      console.error('check_rate_limit failed', rateErr);
+    } else if (!allowed) {
+      return json({ error: 'Too many attempts. Try again in a few minutes.' }, 429);
+    }
 
     const { roomCode, password } = (await req.json()) as { roomCode?: string; password?: string };
     const trimmedCode = roomCode?.trim();
@@ -73,9 +80,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    await admin
+    // This row is what every participant-scoped RLS policy checks, so a silent failure
+    // here means the user joins the call but can't see or send chat/polls at all.
+    const { error: participantErr } = await admin
       .from('meeting_participants')
       .upsert({ meeting_id: meeting.id, user_id: uid, joined_at: new Date().toISOString() }, { onConflict: 'meeting_id,user_id' });
+    if (participantErr) {
+      console.error('meeting_participants upsert failed', participantErr);
+      return json({ error: 'Could not join this meeting. Try again.' }, 500);
+    }
 
     const accessToken = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity: uid,

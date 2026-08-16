@@ -34,11 +34,18 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData.user) return json({ error: 'Sign in required.' }, 401);
 
-    const { data: allowed } = await userClient.rpc('check_rate_limit', {
+    // Destructure the error: without it any RPC failure yields data === null, which
+    // reads as "not allowed" and 429s every request with a misleading message.
+    const { data: allowed, error: rateErr } = await userClient.rpc('check_rate_limit', {
       p_bucket: 'groq-chat',
       p_max_calls: 20,
       p_window_minutes: 10,
     });
+    if (rateErr) {
+      // Fail closed here — unlike joining a meeting, this path spends money upstream.
+      console.error('check_rate_limit failed', rateErr);
+      return json({ error: 'The AI assistant is unavailable right now.' }, 503);
+    }
     if (!allowed) return json({ error: 'Too many requests. Try again in a few minutes.' }, 429);
 
     const { messages, meetingTitle } = (await req.json()) as { messages?: InMessage[]; meetingTitle?: string };
