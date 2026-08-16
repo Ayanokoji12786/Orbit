@@ -12,6 +12,7 @@
       "icon": "./assets/expo.icon",
       "supportsTablet": true,
       "bundleIdentifier": "app.orbit.mobile",
+      "usesAppleSignIn": true,
       "config": {
         "usesNonExemptEncryption": false
       },
