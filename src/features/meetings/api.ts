@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as Crypto from 'expo-crypto';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 
 import { supabase } from '@/lib/supabase';
 import { uniqueChannel } from '@/lib/realtime';
@@ -59,6 +60,20 @@ export async function createMeeting({ title, startsAt, durationMinutes = 30 }: N
 
   if (error) throw error;
   return mapMeeting(data as MeetingRow);
+}
+
+/** Host-only password change. Pass null to remove protection. */
+export async function setMeetingPassword(meetingId: string, password: string | null): Promise<boolean> {
+  if (!supabase) throw new Error('Connect a Supabase project to manage meeting passwords.');
+  const { data, error } = await supabase.functions.invoke<{ hasPassword: boolean }>('set-meeting-password', {
+    body: { meetingId, password },
+  });
+  if (error) {
+    const body = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
+    throw new Error(typeof body?.error === 'string' ? body.error : 'Could not update the meeting password.');
+  }
+  if (typeof data?.hasPassword !== 'boolean') throw new Error('Could not confirm the meeting password change.');
+  return data.hasPassword;
 }
 
 /**

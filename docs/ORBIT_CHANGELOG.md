@@ -1,5 +1,11 @@
 # Orbit development changelog
 
+## 2026-10-10 — password integrity and entry (work branch, pending commit)
+
+- Added a host-authorized database operation that writes the password hash and meeting flag in one transaction, plus a guard against direct inconsistent flag changes. The Edge Function validates input and checks the RPC result instead of writing with a service-role client.
+- Added host password set/change/removal controls and a guest password prompt for protected native joins. Corrected primary-button text color for the dark theme.
+- TypeScript, lint, parser tests, web export, iOS JavaScript export, and signed iOS simulator startup pass. SQL, Edge Function, and two-account behavior remain unverified without an isolated Orbit backend.
+
 ## 2026-10-10 — first completion checkpoint (`136fd40`)
 
 - Established a thread Goal and verified an active hourly local heartbeat for continuation.

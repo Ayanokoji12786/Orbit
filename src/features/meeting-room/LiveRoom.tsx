@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ElementRef, type Ref } from 'react';
-import { ActivityIndicator, findNodeHandle, NativeModules, Platform, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, findNodeHandle, NativeModules, Platform, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,7 +7,7 @@ import { LiveKitRoom, registerGlobals, useDataChannel, useLocalParticipant, useR
 import { ScreenCapturePickerView } from '@livekit/react-native-webrtc';
 import { RoomEvent } from 'livekit-client';
 
-import { AppText, IconButton, PressableScale } from '@/components/ui';
+import { AppText, Button, IconButton, PressableScale } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { fetchLiveKitToken, type LiveKitJoinInfo } from '@/lib/livekit';
 
@@ -43,6 +43,8 @@ type Props = {
 export function LiveRoom({ roomCode, password }: Props) {
   const [joinInfo, setJoinInfo] = useState<LiveKitJoinInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [passwordInput, setPasswordInput] = useState(password ?? '');
+  const [joinAttempt, setJoinAttempt] = useState({ password });
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +53,7 @@ export function LiveRoom({ roomCode, password }: Props) {
     // render that stale error screen.
     setJoinInfo(null);
     setError(null);
-    fetchLiveKitToken(roomCode, password)
+    fetchLiveKitToken(roomCode, joinAttempt.password)
       .then((info) => {
         if (!cancelled) setJoinInfo(info);
       })
@@ -61,8 +63,18 @@ export function LiveRoom({ roomCode, password }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [roomCode, password]);
+  }, [roomCode, joinAttempt]);
 
+  if (error === 'Password required.' || error === 'Incorrect password.') {
+    return (
+      <MeetingPasswordPrompt
+        message={error}
+        value={passwordInput}
+        onChange={setPasswordInput}
+        onJoin={() => { if (passwordInput.trim()) setJoinAttempt({ password: passwordInput }); }}
+      />
+    );
+  }
   if (error) return <JoinStatus icon="alert-circle-outline" message={error} />;
   if (!joinInfo) return <JoinStatus icon="hourglass-outline" message="Connecting…" spinner />;
 
@@ -78,6 +90,41 @@ export function LiveRoom({ roomCode, password }: Props) {
       {/* Keyed so panels, reactions, chat and the AI conversation don't carry into a new meeting. */}
       <RoomContent key={joinInfo.roomName} meetingId={joinInfo.roomName} meetingTitle={joinInfo.meetingTitle} />
     </LiveKitRoom>
+  );
+}
+
+function MeetingPasswordPrompt({ message, value, onChange, onJoin }: {
+  message: string;
+  value: string;
+  onChange: (value: string) => void;
+  onJoin: () => void;
+}) {
+  const { radii, spacing } = useAppTheme();
+
+  return (
+    <View style={{ flex: 1, backgroundColor: '#09090B', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xl }}>
+      <Ionicons name="lock-closed-outline" size={42} color="#7C5CFC" />
+      <AppText variant="headline" style={{ color: '#FFFFFF' }}>Password-protected meeting</AppText>
+      <AppText variant="body" style={{ color: '#A1A1AA' }}>{message === 'Incorrect password.' ? 'That password did not work. Try again.' : 'Enter the password shared by the host.'}</AppText>
+      <TextInput
+        value={value}
+        onChangeText={onChange}
+        onSubmitEditing={onJoin}
+        returnKeyType="join"
+        secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        textContentType="password"
+        placeholder="Meeting password"
+        placeholderTextColor="#8A8A93"
+        accessibilityLabel="Meeting password"
+        style={{ height: 52, paddingHorizontal: spacing.base, borderRadius: radii.md, borderWidth: 1, borderColor: '#45454A', backgroundColor: '#18181C', color: '#FFFFFF', fontSize: 16 }}
+      />
+      <Button label="Join meeting" onPress={onJoin} disabled={!value.trim()} />
+      <PressableScale onPress={() => router.back()} haptic="soft" style={{ alignSelf: 'center', padding: spacing.sm }}>
+        <AppText variant="captionMedium" color="primary">Go back</AppText>
+      </PressableScale>
+    </View>
   );
 }
 
@@ -289,7 +336,7 @@ function JoinStatus({
   return (
     <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingHorizontal: spacing.xl }}>
       {spinner ? <ActivityIndicator color="#5B5FFF" size="large" /> : <Ionicons name={icon} size={56} color="#5B5FFF" />}
-      <AppText variant="body" color="textInverse" style={{ textAlign: 'center' }}>
+      <AppText variant="body" style={{ color: '#FFFFFF', textAlign: 'center' }}>
         {message}
       </AppText>
       <PressableScale onPress={() => router.back()} haptic="soft">

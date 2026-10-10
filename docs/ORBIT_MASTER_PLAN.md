@@ -25,7 +25,7 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 | Account recovery, deletion, profile edit | Missing or UI-only | Edit/profile privacy screens are stubs; no recovery or deletion flow. |
 | Contacts and direct chat | Partially implemented | Email lookup, add, favorite, DM and Realtime code exist; remove, reconnection, multi-user tests absent. |
 | Image/file attachments | Partial | Private image upload and signed read exist; general files and upload lifecycle are absent. |
-| Meeting creation/join/password/LiveKit | Partial | Creation, token issuance and native room exist; password-setting UI, lifecycle and device verification absent. Join link parser added locally. |
+| Meeting creation/join/password/LiveKit | Partial | Creation, token issuance, native room, host password controls, and guest password entry exist locally; atomic password RPC and device/backend behavior need validation and deployment. Lifecycle remains incomplete. |
 | In-call chat and polls | Implemented, unverified | Supabase tables, RLS, subscriptions and UI exist; two-user tests needed. |
 | Reactions and Raise Hand | Implemented locally, unverified | LiveKit data/attributes changes on this branch; requires new token function deployment and two-device test. |
 | Whiteboard | Local-only | Skia strokes do not synchronize or persist. |

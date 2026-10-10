@@ -39,13 +39,13 @@ export function Button({
   const content = (
     <View style={styles.contentRow}>
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? colors.textInverse : colors.textPrimary} />
+        <ActivityIndicator color={variant === 'primary' ? colors.textOnPrimary : colors.textPrimary} />
       ) : (
         <>
           {icon}
           <AppText
             variant="headline"
-            color={variant === 'primary' ? 'textInverse' : variant === 'destructive' ? 'error' : 'textPrimary'}>
+            color={variant === 'primary' ? 'textOnPrimary' : variant === 'destructive' ? 'error' : 'textPrimary'}>
             {label}
           </AppText>
         </>

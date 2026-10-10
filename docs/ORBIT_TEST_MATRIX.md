@@ -12,7 +12,7 @@ Updated 2026-10-10. `PASS` means a named test actually ran; `BLOCKED` means no t
 | Image / file attachments | Private upload, signed read, errors | Image path exists; other files absent | No upload test | FAIL: partial |
 | Instant / scheduled meetings | Create, list, join and manage | Create/list exists; lifecycle incomplete | No device/backend test | BLOCKED / partial |
 | Join code/link | Accept six-character code or Orbit link, reject lookalikes | Parser added; join UI uses it | `npm test`: 2/2 PASS | PASS unit; native navigation pending |
-| Password / token authorization | Host-only password; valid participant token; bounded attempts | Edge Functions and RLS exist; quota hardening local | No isolated DB/function test | BLOCKED: migration/deploy and two-user test |
+| Password / token authorization | Host-only atomic password changes; guest challenge; valid token; bounded attempts | Host and guest UI, hash-only Edge Function, host-checked atomic RPC, quota hardening added locally | TypeScript/lint and web/iOS JS exports PASS; no isolated DB/function or two-account test | BLOCKED: migration/deploy and host/guest integration test |
 | Media / screen share / reconnect | Native call, toggles, share and recover | Native LiveKit code; web preview now labels disabled native-only controls and does not mint a token | Web export PASS; no device test | BLOCKED: iOS and Android |
 | In-call chat / polls | Participant-scoped realtime messages and votes | Tables, RLS, UI and subscriptions | No two-user test | BLOCKED |
 | Raise Hand / reactions | Visible to all live participants | LiveKit attributes and data packets added locally | TypeScript PASS; no two-device test | BLOCKED: token deployment/device |
