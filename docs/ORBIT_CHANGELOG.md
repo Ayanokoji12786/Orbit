@@ -1,6 +1,6 @@
 # Orbit development changelog
 
-## 2026-10-10 — first completion checkpoint (work branch, pending commit)
+## 2026-10-10 — first completion checkpoint (`136fd40`)
 
 - Established a thread Goal and verified an active hourly local heartbeat for continuation.
 - Audited source against the mission and created the six durable project records.

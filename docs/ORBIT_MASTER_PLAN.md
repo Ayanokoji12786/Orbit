@@ -37,4 +37,4 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 
 ## Continuation
 
-The Codex Goal was created for this chat; its status should be checked at each continuation because an earlier run reported it blocked. App heartbeat `continue-orbit-development` is registered hourly for this thread. It is a local continuation: this Mac must remain awake with the app running. If a run finds another active writer, another run's dirty checkout, or exhausted usage, it must avoid duplicate work. There is no verified hosted executor for this local checkout. When the mission is truly complete, disable the heartbeat.
+The Codex Goal is active on this chat as of this checkpoint. App heartbeat `continue-orbit-development` is registered hourly for this thread. It is a local continuation: this Mac must remain awake with the app running. If a run finds another active writer, another run's dirty checkout, or exhausted usage, it must avoid duplicate work. There is no verified hosted executor for this local checkout. When the mission is truly complete, disable the heartbeat.
