@@ -4,62 +4,74 @@ import { Canvas, Path } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
-type Point = { x: number; y: number };
-type Stroke = { id: string; color: string; points: Point[] };
+import { MAX_STROKE_POINTS, type WhiteboardPoint, type WhiteboardStroke } from '@/utils/whiteboard-events';
 
 const BACKGROUND = '#0B0B0E';
 
-function pointsToSvgPath(points: Point[]) {
+function pointsToSvgPath(points: WhiteboardPoint[], width: number, height: number) {
   if (points.length === 0) return '';
   const [first, ...rest] = points;
-  return `M ${first.x} ${first.y} ` + rest.map((p) => `L ${p.x} ${p.y}`).join(' ');
+  return `M ${first.x * width} ${first.y * height} ` + rest.map((p) => `L ${p.x * width} ${p.y * height}`).join(' ');
 }
 
 type Props = {
   activeColor: string;
-  strokes: Stroke[];
-  onStrokesChange: (strokes: Stroke[]) => void;
+  strokes: WhiteboardStroke[];
+  onStroke: (stroke: WhiteboardStroke) => void;
 };
 
-export function WhiteboardCanvas({ activeColor, strokes, onStrokesChange }: Props) {
-  const [liveStroke, setLiveStroke] = useState<Stroke | null>(null);
+export function WhiteboardCanvas({ activeColor, strokes, onStroke }: Props) {
+  const [liveStroke, setLiveStroke] = useState<WhiteboardStroke | null>(null);
+  const [dimensions, setDimensions] = useState({ width: 1, height: 1 });
+  const dimensionsRef = useRef(dimensions);
   // Mirrors liveStroke for the gesture callbacks, so `endStroke` can read the finished
   // stroke without doing work inside a state updater (updaters must stay pure — React
   // may invoke them more than once, which would commit the stroke twice).
-  const liveStrokeRef = useRef<Stroke | null>(null);
+  const liveStrokeRef = useRef<WhiteboardStroke | null>(null);
+
+  const normalizedPoint = useCallback((x: number, y: number): WhiteboardPoint => {
+    const { width, height } = dimensionsRef.current;
+    return {
+      x: Math.round(Math.max(0, Math.min(1, x / width)) * 10000) / 10000,
+      y: Math.round(Math.max(0, Math.min(1, y / height)) * 10000) / 10000,
+    };
+  }, []);
 
   const startStroke = useCallback(
     (x: number, y: number) => {
       // Date.now() alone collides when two strokes start in the same millisecond
       // (fast dotting), producing duplicate React keys.
-      const stroke: Stroke = {
+      const stroke: WhiteboardStroke = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         color: activeColor,
-        points: [{ x, y }],
+        points: [normalizedPoint(x, y)],
       };
       liveStrokeRef.current = stroke;
       setLiveStroke(stroke);
     },
-    [activeColor],
+    [activeColor, normalizedPoint],
   );
 
   const appendPoint = useCallback((x: number, y: number) => {
-    setLiveStroke((current) => {
-      if (!current) return current;
-      const next = { ...current, points: [...current.points, { x, y }] };
-      liveStrokeRef.current = next;
-      return next;
-    });
-  }, []);
+    const current = liveStrokeRef.current;
+    if (!current || current.points.length >= MAX_STROKE_POINTS) return;
+    const point = normalizedPoint(x, y);
+    const last = current.points[current.points.length - 1];
+    if (last.x === point.x && last.y === point.y) return;
+    const next = { ...current, points: [...current.points, point] };
+    liveStrokeRef.current = next;
+    setLiveStroke(next);
+  }, [normalizedPoint]);
 
   const endStroke = useCallback(() => {
     const finished = liveStrokeRef.current;
     liveStrokeRef.current = null;
     setLiveStroke(null);
-    if (finished && finished.points.length > 1) {
-      onStrokesChange([...strokes, finished]);
+    if (finished) {
+      // Two identical points let Skia draw a dot and satisfy the server limit.
+      onStroke(finished.points.length === 1 ? { ...finished, points: [finished.points[0], finished.points[0]] } : finished);
     }
-  }, [strokes, onStrokesChange]);
+  }, [onStroke]);
 
   // Rebuilding the gesture on every render reconfigures GestureDetector mid-stroke,
   // which drops points and causes visible jank on long strokes.
@@ -75,12 +87,22 @@ export function WhiteboardCanvas({ activeColor, strokes, onStrokesChange }: Prop
 
   return (
     <GestureDetector gesture={pan}>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: BACKGROUND }]}>
+      <View
+        onLayout={(event) => {
+          const { width, height } = event.nativeEvent.layout;
+          if (width > 0 && height > 0 &&
+              (width !== dimensionsRef.current.width || height !== dimensionsRef.current.height)) {
+            const next = { width, height };
+            dimensionsRef.current = next;
+            setDimensions(next);
+          }
+        }}
+        style={[StyleSheet.absoluteFill, { backgroundColor: BACKGROUND }]}>
         <Canvas style={StyleSheet.absoluteFill}>
           {strokes.map((stroke) => (
             <Path
               key={stroke.id}
-              path={pointsToSvgPath(stroke.points)}
+              path={pointsToSvgPath(stroke.points, dimensions.width, dimensions.height)}
               color={stroke.color}
               style="stroke"
               strokeWidth={5}
@@ -90,7 +112,7 @@ export function WhiteboardCanvas({ activeColor, strokes, onStrokesChange }: Prop
           ))}
           {liveStroke && (
             <Path
-              path={pointsToSvgPath(liveStroke.points)}
+              path={pointsToSvgPath(liveStroke.points, dimensions.width, dimensions.height)}
               color={liveStroke.color}
               style="stroke"
               strokeWidth={5}
@@ -104,5 +126,4 @@ export function WhiteboardCanvas({ activeColor, strokes, onStrokesChange }: Prop
   );
 }
 
-export type { Stroke };
 export { BACKGROUND as WHITEBOARD_BACKGROUND };

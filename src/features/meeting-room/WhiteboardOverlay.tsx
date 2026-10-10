@@ -4,19 +4,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, IconButton, PressableScale } from '@/components/ui';
 
-import { WhiteboardCanvas, type Stroke } from './WhiteboardCanvas';
+import { WHITEBOARD_COLORS } from '@/utils/whiteboard-events';
 
-const COLORS = ['#F5F5F7', '#5B5FFF', '#7C5CFC', '#20C997', '#F59F00', '#FF4D6D'];
+import { WhiteboardCanvas } from './WhiteboardCanvas';
+import { useWhiteboardEvents } from './useWhiteboardEvents';
 
 type Props = {
   visible: boolean;
   onClose: () => void;
+  meetingId?: string;
+  canClear?: boolean;
 };
 
-export function WhiteboardOverlay({ visible, onClose }: Props) {
+export function WhiteboardOverlay({ visible, onClose, meetingId, canClear = false }: Props) {
   const insets = useSafeAreaInsets();
-  const [strokes, setStrokes] = useState<Stroke[]>([]);
-  const [activeColor, setActiveColor] = useState(COLORS[0]);
+  const [activeColor, setActiveColor] = useState<string>(WHITEBOARD_COLORS[0]);
+  const { strokes, loading, error, addStroke, clearBoard } = useWhiteboardEvents(meetingId);
 
   if (!visible) return null;
 
@@ -24,7 +27,7 @@ export function WhiteboardOverlay({ visible, onClose }: Props) {
     // No entering/exiting animation: mounting Skia's canvas can block the
     // animation frame loop and leave this stuck invisible mid-fade.
     <View style={[StyleSheet.absoluteFill, { zIndex: 20 }]}>
-      <WhiteboardCanvas activeColor={activeColor} strokes={strokes} onStrokesChange={setStrokes} />
+      <WhiteboardCanvas activeColor={activeColor} strokes={strokes} onStroke={(stroke) => { void addStroke(stroke); }} />
 
       <View
         style={{
@@ -36,11 +39,19 @@ export function WhiteboardOverlay({ visible, onClose }: Props) {
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-        <AppText variant="headline" color="textInverse">
+        <AppText variant="headline" style={{ color: '#FFFFFF' }}>
           Whiteboard
         </AppText>
         <IconButton name="close" variant="glass" accessibilityLabel="Close whiteboard" onPress={onClose} />
       </View>
+
+      {(loading || error) && (
+        <View style={{ position: 'absolute', top: insets.top + 64, left: 16, right: 16 }}>
+          <AppText variant="caption" style={{ color: error ? '#FF4D6D' : '#A1A1AA' }}>
+            {error ?? 'Loading shared strokes…'}
+          </AppText>
+        </View>
+      )}
 
       <View
         style={{
@@ -59,7 +70,7 @@ export function WhiteboardOverlay({ visible, onClose }: Props) {
           paddingVertical: 10,
         }}>
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          {COLORS.map((color) => (
+          {WHITEBOARD_COLORS.map((color) => (
             <PressableScale key={color} onPress={() => setActiveColor(color)} haptic="light" accessibilityLabel={`Color ${color}`}>
               <View
                 style={{
@@ -74,11 +85,13 @@ export function WhiteboardOverlay({ visible, onClose }: Props) {
             </PressableScale>
           ))}
         </View>
-        <PressableScale onPress={() => setStrokes([])} haptic="soft" accessibilityLabel="Clear whiteboard">
-          <AppText variant="captionMedium" color="textInverse">
-            Clear
-          </AppText>
-        </PressableScale>
+        {canClear ? (
+          <PressableScale onPress={() => { void clearBoard(); }} haptic="soft" accessibilityLabel="Clear whiteboard">
+            <AppText variant="captionMedium" style={{ color: '#FFFFFF' }}>Clear</AppText>
+          </PressableScale>
+        ) : (
+          <AppText variant="micro" style={{ color: '#A1A1AA' }}>Host clears</AppText>
+        )}
       </View>
     </View>
   );

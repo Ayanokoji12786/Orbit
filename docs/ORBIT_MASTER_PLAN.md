@@ -28,7 +28,7 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 | Meeting creation/join/password/LiveKit | Partial | Creation, token issuance, native room, host password controls, and guest password entry exist locally; atomic password RPC and device/backend behavior need validation and deployment. Lifecycle remains incomplete. |
 | In-call chat and polls | Implemented, unverified | Supabase tables, RLS, subscriptions and UI exist; two-user tests needed. |
 | Reactions and Raise Hand | Implemented locally, unverified | LiveKit data/attributes changes on this branch; requires new token function deployment and two-device test. |
-| Whiteboard | Local-only | Skia strokes do not synchronize or persist. |
+| Whiteboard | Implemented locally, unverified | Native strokes now use normalized coordinates and participant-scoped Supabase events with realtime replay and host-only clear; latest 500 changes retained. Migration/deployment/two-device test pending. Web remains a local preview. |
 | Screen sharing and participant controls | Partial | Native share attempt exists; no host moderation; web preview now labels native-only controls. |
 | Reminders and notifications | Partial | Local reminder scheduling exists; in-app inbox now shows an honest unavailable state; cancel/reschedule/navigation absent. |
 | AI assistant | Implemented, unverified | `groq-chat` validates auth/input, rate-limits and proxies Groq; key and end-to-end behavior unverified. It has no meeting audio/transcript context. |

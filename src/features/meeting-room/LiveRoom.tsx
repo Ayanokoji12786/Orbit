@@ -88,7 +88,7 @@ export function LiveRoom({ roomCode, password }: Props) {
       onDisconnected={() => router.back()}
       onError={(err) => setError(err.message)}>
       {/* Keyed so panels, reactions, chat and the AI conversation don't carry into a new meeting. */}
-      <RoomContent key={joinInfo.roomName} meetingId={joinInfo.roomName} meetingTitle={joinInfo.meetingTitle} />
+      <RoomContent key={joinInfo.roomName} meetingId={joinInfo.roomName} meetingTitle={joinInfo.meetingTitle} isHost={joinInfo.isHost} />
     </LiveKitRoom>
   );
 }
@@ -128,7 +128,7 @@ function MeetingPasswordPrompt({ message, value, onChange, onJoin }: {
   );
 }
 
-function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTitle: string }) {
+function RoomContent({ meetingId, meetingTitle, isHost }: { meetingId: string; meetingTitle: string; isHost: boolean }) {
   const { spacing } = useAppTheme();
   const insets = useSafeAreaInsets();
   const room = useRoomContext();
@@ -317,7 +317,7 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
       <PollsPanel visible={panel === 'polls'} onClose={() => setPanel(null)} meetingId={meetingId} />
       <AiAssistantPanel visible={panel === 'ai'} onClose={() => setPanel(null)} meetingTitle={meetingTitle} />
       <ParticipantsSheet visible={panel === 'participants'} onClose={() => setPanel(null)} participants={participants} />
-      <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} />
+      <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} meetingId={meetingId} canClear={isHost} />
     </View>
   );
 }

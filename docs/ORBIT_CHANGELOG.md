@@ -1,5 +1,11 @@
 # Orbit development changelog
 
+## 2026-10-10 — shared whiteboard (work branch, pending commit)
+
+- Replaced native local-only strokes with normalized coordinates and a participant-scoped Supabase event log. Initial fetch and realtime inserts merge by sequence; late joiners and reconnects replay the same latest 500 changes. Clear is host-only; the web preview stays local.
+- Added database-side event validation, a 120 changes/minute per-user bound, 500-event retention, and four passing client merge/validation tests.
+- TypeScript, lint, all 6 unit tests, web export, and iOS JavaScript export pass. The SQL migration, authorization policies, live sync, and two-device behavior remain unverified without an isolated Orbit backend.
+
 ## 2026-10-10 — password integrity and entry (`51d4ae6`)
 
 - Added a host-authorized database operation that writes the password hash and meeting flag in one transaction, plus a guard against direct inconsistent flag changes. The Edge Function validates input and checks the RPC result instead of writing with a service-role client.

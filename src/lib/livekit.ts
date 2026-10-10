@@ -8,6 +8,7 @@ export type LiveKitJoinInfo = {
   url: string;
   roomName: string;
   meetingTitle: string;
+  isHost: boolean;
 };
 
 export class MeetingJoinError extends Error {}

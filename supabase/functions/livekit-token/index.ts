@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
 
     const { data: meeting } = await admin
       .from('meetings')
-      .select('id, title, has_password')
+      .select('id, title, has_password, host_id')
       .eq('room_code', trimmedCode)
       .maybeSingle();
     if (!meeting) return json({ error: 'Meeting not found.' }, 404);
@@ -112,6 +112,7 @@ Deno.serve(async (req) => {
       url: LIVEKIT_URL,
       roomName: meeting.id,
       meetingTitle: meeting.title,
+      isHost: meeting.host_id === uid,
     });
   } catch (err) {
     console.error(err);

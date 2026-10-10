@@ -16,12 +16,12 @@ Updated 2026-10-10. `PASS` means a named test actually ran; `BLOCKED` means no t
 | Media / screen share / reconnect | Native call, toggles, share and recover | Native LiveKit code; web preview now labels disabled native-only controls and does not mint a token | Web export PASS; no device test | BLOCKED: iOS and Android |
 | In-call chat / polls | Participant-scoped realtime messages and votes | Tables, RLS, UI and subscriptions | No two-user test | BLOCKED |
 | Raise Hand / reactions | Visible to all live participants | LiveKit attributes and data packets added locally | TypeScript PASS; no two-device test | BLOCKED: token deployment/device |
-| Whiteboard | Synchronized, authorized strokes | Strokes are local state | None | FAIL: not collaborative |
+| Whiteboard | Synchronized authorized strokes, late-join replay, host-only clear | Normalized strokes, bounded participant-scoped event log/RPC, realtime merge and local preview added | 4 event ordering/validation tests PASS; TypeScript/lint/web+iOS JS exports PASS; no DB/RLS/two-device test | BLOCKED: migration/deploy and multi-user validation |
 | Reminders / notification inbox | Schedule, navigate, cancel/reschedule | Local scheduling; fabricated inbox removed and honest empty state shown | Web export PASS; no device test | FAIL: partial |
 | AI assistant | Authorized bounded server-side model calls | Groq Edge Function present | No configured end-to-end test | BLOCKED: backend/key |
 | Summary/notes/actions/transcription/captions/translation/search | Consent-gated processing and honest results | Fabricated summary/recording content removed; no pipeline | Web export PASS; no backend test | FAIL: missing |
 | UI/accessibility | Every route and control usable on iOS/Android/web preview | Many routes unreviewed; stubs remain | No visual/device audit | BLOCKED / partial |
-| TypeScript / lint / dependency fit | Clean checks | TypeScript and lint pass | `tsc` PASS; lint 0 errors, 0 warnings; Expo check offline | PARTIAL: dependency check inconclusive |
+| TypeScript / lint / dependency fit | Clean checks | TypeScript and lint pass | `tsc` PASS; lint 0 errors, 0 warnings; `npm test` 6/6 PASS; Expo check offline | PARTIAL: dependency check inconclusive |
 | Web preview build | All preview routes export | Static web export completed | `npx expo export --platform web` PASS (55 routes) | PASS build; visual/browser review pending |
 | Native builds | iOS/Android build and smoke test | Native projects exist | iOS Debug simulator `xcodebuild` PASS; ad-hoc signed app installed and reached sign-in screen on iOS 26.5 Orbit Test; Android not run | PARTIAL: authenticated journeys and Android pending |
 

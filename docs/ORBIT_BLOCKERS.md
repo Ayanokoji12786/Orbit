@@ -4,7 +4,7 @@ Updated 2026-10-10. These are specific limits, not permission to claim a test pa
 
 | Blocker | Evidence | Work possible meanwhile / unlock |
 | --- | --- | --- |
-| Orbit Supabase project not available in connected account | Supabase connector lists only an unrelated project; `.env.local` points elsewhere. | Maintain migrations/functions locally. Isolated Orbit project access or local Docker/Postgres is needed to test both pending security migrations, password host/guest behavior, and RLS. Never apply migrations to the unrelated project. |
+| Orbit Supabase project not available in connected account | Supabase connector lists only an unrelated project; `.env.local` points elsewhere. | Maintain migrations/functions locally. Isolated Orbit project access or local Docker/Postgres is needed to test the three pending migrations, password host/guest behavior, whiteboard synchronization, and RLS. Never apply migrations to the unrelated project. |
 | No local database runtime | No `docker`, `psql`, `pg_ctl`, `initdb`, or Deno command found. | Official Supabase CLI can create migrations via `npx`; SQL execution needs a safe database. |
 | Authenticated native behavior not yet verified | Ad-hoc signed iOS Debug app installed and reached sign-in screen; no signed-in iOS/Android journey has run. An unsigned simulator app cannot access SecureStore Keychain. | Test authenticated journeys with isolated accounts; Android remains separate. |
 | LiveKit/Groq configuration unknown | No provider secret was read or printed; deployment state unverified. | Unit and mocked integration tests can proceed; real calls need authorized function deployments and test accounts. |

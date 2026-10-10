@@ -117,7 +117,7 @@ export function LiveRoom({ roomCode }: Props) {
         ]}
       />
       <ParticipantsSheet visible={panel === 'participants'} onClose={() => setPanel(null)} participants={tiles} />
-      <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} />
+      <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} canClear />
     </View>
   );
 }
