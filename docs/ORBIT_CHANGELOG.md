@@ -1,6 +1,6 @@
 # Orbit development changelog
 
-## 2026-10-10 — password integrity and entry (work branch, pending commit)
+## 2026-10-10 — password integrity and entry (`51d4ae6`)
 
 - Added a host-authorized database operation that writes the password hash and meeting flag in one transaction, plus a guard against direct inconsistent flag changes. The Edge Function validates input and checks the RPC result instead of writing with a service-role client.
 - Added host password set/change/removal controls and a guest password prompt for protected native joins. Corrected primary-button text color for the dark theme.
