@@ -3,7 +3,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { AppText, Avatar, BottomSheet } from '@/components/ui';
 
-type Participant = { id: string; name: string; muted?: boolean };
+type Participant = { id: string; name: string; muted?: boolean; handRaised?: boolean };
 
 type Props = {
   visible: boolean;
@@ -29,6 +29,7 @@ export function ParticipantsSheet({ visible, onClose, participants }: Props) {
             <AppText variant="body" color="textInverse" style={{ flex: 1 }}>
               {p.name}
             </AppText>
+            {p.handRaised && <Ionicons name="hand-left" size={18} color="#F59F00" accessibilityLabel="Hand raised" />}
             {p.muted && <Ionicons name="mic-off" size={16} color="rgba(255,255,255,0.5)" />}
           </View>
         ))}

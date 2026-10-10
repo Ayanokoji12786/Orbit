@@ -1,23 +1,11 @@
-import { registerGlobals } from '@livekit/react-native';
-
-registerGlobals();
-
-import { useEffect, useRef, useState, type ComponentType, type ElementRef, type Ref } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentType, type ElementRef, type Ref } from 'react';
 import { ActivityIndicator, findNodeHandle, NativeModules, Platform, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LiveKitRoom, useLocalParticipant, useRemoteParticipants } from '@livekit/react-native';
+import { LiveKitRoom, registerGlobals, useDataChannel, useLocalParticipant, useRemoteParticipants, useRoomContext } from '@livekit/react-native';
 import { ScreenCapturePickerView } from '@livekit/react-native-webrtc';
-
-// The library types this as HostComponent<unknown> — no props at all, even though the
-// underlying native view does accept standard style props. Cast once here instead of
-// suppressing the error at every usage site; the ref type is preserved from the original.
-type ScreenCapturePickerViewRef = ElementRef<typeof ScreenCapturePickerView>;
-const TypedScreenCapturePickerView = ScreenCapturePickerView as ComponentType<{
-  ref?: Ref<ScreenCapturePickerViewRef>;
-  style?: StyleProp<ViewStyle>;
-}>;
+import { RoomEvent } from 'livekit-client';
 
 import { AppText, IconButton, PressableScale } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
@@ -33,7 +21,19 @@ import { PollsPanel } from './PollsPanel';
 import { VideoGrid } from './VideoGrid';
 import { WhiteboardOverlay } from './WhiteboardOverlay';
 
+registerGlobals();
+
+// The library types this as HostComponent<unknown> — no props at all, even though the
+// underlying native view does accept standard style props. Cast once here instead of
+// suppressing the error at every usage site; the ref type is preserved from the original.
+type ScreenCapturePickerViewRef = ElementRef<typeof ScreenCapturePickerView>;
+const TypedScreenCapturePickerView = ScreenCapturePickerView as ComponentType<{
+  ref?: Ref<ScreenCapturePickerViewRef>;
+  style?: StyleProp<ViewStyle>;
+}>;
+
 type Panel = 'chat' | 'whiteboard' | 'polls' | 'participants' | 'more' | 'ai' | null;
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '👏', '🎉'];
 
 type Props = {
   roomCode: string;
@@ -84,16 +84,59 @@ export function LiveRoom({ roomCode, password }: Props) {
 function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTitle: string }) {
   const { spacing } = useAppTheme();
   const insets = useSafeAreaInsets();
+  const room = useRoomContext();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
   const [panel, setPanel] = useState<Panel>(null);
   const [reactions, setReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
+  // An attribute event re-renders this room and its existing participant tiles.
+  const [, setAttributesRevision] = useState(0);
+  const [roomActionError, setRoomActionError] = useState<string | null>(null);
+  const { message: reactionMessage, send: sendReaction } = useDataChannel('orbit.reaction');
   const screenSharePickerRef = useRef<ScreenCapturePickerViewRef>(null);
 
-  const spawnReaction = (emoji: string) => {
+  useEffect(() => {
+    const onAttributesChanged = () => setAttributesRevision((revision) => revision + 1);
+    room.on(RoomEvent.ParticipantAttributesChanged, onAttributesChanged);
+    return () => { room.off(RoomEvent.ParticipantAttributesChanged, onAttributesChanged); };
+  }, [room]);
+
+  const addReaction = useCallback((emoji: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const x = 40 + Math.random() * 220;
     setReactions((current) => [...current, { id, emoji, x }]);
+  }, []);
+  const removeReaction = useCallback((id: string) => {
+    setReactions((current) => current.filter((reaction) => reaction.id !== id));
+  }, []);
+
+  useEffect(() => {
+    if (!reactionMessage) return;
+    if (reactionMessage.from?.identity === localParticipant.identity) return;
+    const emoji = REACTION_EMOJIS[reactionMessage.payload[0]];
+    if (emoji) addReaction(emoji);
+  }, [reactionMessage, localParticipant.identity, addReaction]);
+
+  const spawnReaction = (emoji: string) => {
+    const index = REACTION_EMOJIS.indexOf(emoji);
+    if (index < 0) return;
+    setRoomActionError(null);
+    void sendReaction(new Uint8Array([index]), { reliable: false }).then(
+      () => addReaction(emoji),
+      () => setRoomActionError('Could not send your reaction. Try again.'),
+    );
+  };
+
+  const handRaised = localParticipant.attributes['orbit.handRaised'] === 'true';
+  const toggleHand = async () => {
+    setRoomActionError(null);
+    try {
+      await localParticipant.setAttributes({ 'orbit.handRaised': handRaised ? '' : 'true' });
+      setAttributesRevision((revision) => revision + 1);
+      setPanel(null);
+    } catch (err) {
+      setRoomActionError(err instanceof Error ? err.message : 'Could not update your hand.');
+    }
   };
 
   const [screenShareError, setScreenShareError] = useState<string | null>(null);
@@ -119,8 +162,8 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
   };
 
   const participants = [
-    { id: localParticipant.identity, name: `${localParticipant.name || 'You'} (you)`, muted: !isMicrophoneEnabled },
-    ...remoteParticipants.map((p) => ({ id: p.identity, name: p.name || p.identity, muted: !p.isMicrophoneEnabled })),
+    { id: localParticipant.identity, name: `${localParticipant.name || 'You'} (you)`, muted: !isMicrophoneEnabled, handRaised },
+    ...remoteParticipants.map((p) => ({ id: p.identity, name: p.name || p.identity, muted: !p.isMicrophoneEnabled, handRaised: p.attributes['orbit.handRaised'] === 'true' })),
   ];
 
   return (
@@ -166,14 +209,15 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
 
       {reactions.map((r) => (
         <FloatingReaction
+          id={r.id}
           key={r.id}
           emoji={r.emoji}
           startX={r.x}
-          onDone={() => setReactions((current) => current.filter((x) => x.id !== r.id))}
+          onDone={removeReaction}
         />
       ))}
 
-      {screenShareError && (
+      {(screenShareError || roomActionError) && (
         <View
           style={{
             position: 'absolute',
@@ -184,7 +228,7 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
           }}>
           <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 }}>
             <AppText variant="caption" color="error" style={{ textAlign: 'center' }}>
-              {screenShareError}
+              {screenShareError || roomActionError}
             </AppText>
           </View>
         </View>
@@ -219,7 +263,7 @@ function RoomContent({ meetingId, meetingTitle }: { meetingId: string; meetingTi
               void toggleScreenShare();
             },
           },
-          { icon: 'hand-left-outline', label: 'Raise hand', onPress: () => setPanel(null) },
+          { icon: 'hand-left-outline', label: handRaised ? 'Lower hand' : 'Raise hand', onPress: () => { void toggleHand(); } },
         ]}
       />
       <ChatPanel visible={panel === 'chat'} onClose={() => setPanel(null)} meetingId={meetingId} />

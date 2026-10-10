@@ -6,10 +6,22 @@ import { router } from 'expo-router';
 import { AppText, Button, GradientBackground } from '@/components/ui';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { useAppTheme } from '@/design-system/useAppTheme';
+import { parseRoomCode } from '@/utils/meeting-links';
 
 export default function JoinMeeting() {
   const { colors, spacing, radii } = useAppTheme();
   const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const join = () => {
+    const roomCode = parseRoomCode(code);
+    if (!roomCode) {
+      setError('Enter a six-character meeting code or a valid Orbit meeting link.');
+      return;
+    }
+    setError(null);
+    router.replace(`/meeting/${roomCode}`);
+  };
 
   return (
     <GradientBackground>
@@ -21,7 +33,7 @@ export default function JoinMeeting() {
           </AppText>
           <TextInput
             value={code}
-            onChangeText={setCode}
+            onChangeText={(value) => { setCode(value); setError(null); }}
             placeholder="orbit.app/j/abc123"
             placeholderTextColor={colors.textTertiary}
             autoCapitalize="none"
@@ -39,10 +51,12 @@ export default function JoinMeeting() {
           />
         </View>
 
+        {error && <AppText variant="caption" color="error">{error}</AppText>}
+
         <Button
           label="Join"
           disabled={!code.trim()}
-          onPress={() => router.replace(`/meeting/${encodeURIComponent(code.trim())}`)}
+          onPress={join}
         />
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>

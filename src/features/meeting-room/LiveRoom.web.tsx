@@ -1,65 +1,29 @@
-// @livekit/react-native has no web implementation. This preview keeps the
-// room's visual design and panels testable in a browser without a real
-// video connection — real calling only ever runs on iOS/Android.
-import { useEffect, useState } from 'react';
+// @livekit/react-native has no web implementation. Keep this a visual preview:
+// fetching a native token here would falsely register the browser as a joined
+// participant even though it has no media connection.
+import { useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText, Avatar, IconButton } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
-import { fetchLiveKitToken, type LiveKitJoinInfo } from '@/lib/livekit';
-
-import { AiAssistantPanel } from './AiAssistantPanel';
-import { ChatPanel } from './ChatPanel';
 import { ControlBar } from './ControlBar';
-import { FloatingReaction } from './FloatingReaction';
 import { MoreSheet } from './MoreSheet';
 import { ParticipantsSheet } from './ParticipantsSheet';
-import { PollsPanel } from './PollsPanel';
 import { WhiteboardOverlay } from './WhiteboardOverlay';
 
-type Panel = 'chat' | 'whiteboard' | 'polls' | 'participants' | 'more' | 'ai' | null;
+type Panel = 'whiteboard' | 'participants' | 'more' | null;
 
 type Props = {
   roomCode: string;
   password?: string;
 };
 
-export function LiveRoom({ roomCode, password }: Props) {
+export function LiveRoom({ roomCode }: Props) {
   const { spacing, radii } = useAppTheme();
   const insets = useSafeAreaInsets();
-  const [muted, setMuted] = useState(false);
-  const [cameraOff, setCameraOff] = useState(true);
-  const [screenSharing, setScreenSharing] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
-  const [reactions, setReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
-  const [joinInfo, setJoinInfo] = useState<LiveKitJoinInfo | null>(null);
-
-  // The panels key off the meeting's UUID, not the room code — passing the code made
-  // every chat/poll query fail as an invalid uuid, silently, so web showed empty panels
-  // and dropped every message. The token endpoint is a plain edge function, so it works
-  // here even though the LiveKit SDK itself has no web build.
-  useEffect(() => {
-    let cancelled = false;
-    setJoinInfo(null);
-    fetchLiveKitToken(roomCode, password)
-      .then((info) => {
-        if (!cancelled) setJoinInfo(info);
-      })
-      .catch(() => {
-        // Preview-only: panels stay disabled below rather than showing an error screen.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [roomCode, password]);
-
-  const spawnReaction = (emoji: string) => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const x = 40 + Math.random() * 220;
-    setReactions((current) => [...current, { id, emoji, x }]);
-  };
 
   const tiles = [{ id: 'self', name: 'You' }];
 
@@ -124,19 +88,13 @@ export function LiveRoom({ roomCode, password }: Props) {
         ))}
       </View>
 
-      {reactions.map((r) => (
-        <FloatingReaction key={r.id} emoji={r.emoji} startX={r.x} onDone={() => setReactions((c) => c.filter((x) => x.id !== r.id))} />
-      ))}
-
       <View style={{ position: 'absolute', bottom: 40, left: spacing.lg, right: spacing.lg }}>
         <ControlBar
-          muted={muted}
-          onToggleMute={() => setMuted((m) => !m)}
-          cameraOff={cameraOff}
-          onToggleCamera={() => setCameraOff((c) => !c)}
-          onReact={spawnReaction}
+          muted
+          cameraOff
           onMore={() => setPanel('more')}
           onLeave={() => router.back()}
+          previewOnly
         />
       </View>
 
@@ -150,27 +108,13 @@ export function LiveRoom({ roomCode, password }: Props) {
         visible={panel === 'more'}
         onClose={() => setPanel(null)}
         actions={[
-          { icon: 'chatbubble-outline', label: 'Chat', onPress: () => setPanel('chat') },
-          { icon: 'brush-outline', label: 'Whiteboard', onPress: () => setPanel('whiteboard') },
-          { icon: 'stats-chart-outline', label: 'Polls', onPress: () => setPanel('polls') },
-          { icon: 'sparkles-outline', label: 'AI Assistant', onPress: () => setPanel('ai') },
-          {
-            icon: screenSharing ? 'stop-circle-outline' : 'desktop-outline',
-            label: screenSharing ? 'Stop sharing' : 'Share screen',
-            onPress: () => {
-              setPanel(null);
-              setScreenSharing((s) => !s);
-            },
-          },
-          { icon: 'hand-left-outline', label: 'Raise hand', onPress: () => setPanel(null) },
+          { icon: 'chatbubble-outline', label: 'Chat (native only)', disabled: true },
+          { icon: 'brush-outline', label: 'Whiteboard (local preview)', onPress: () => setPanel('whiteboard') },
+          { icon: 'stats-chart-outline', label: 'Polls (native only)', disabled: true },
+          { icon: 'sparkles-outline', label: 'AI Assistant (native only)', disabled: true },
+          { icon: 'desktop-outline', label: 'Share screen (native only)', disabled: true },
+          { icon: 'hand-left-outline', label: 'Raise hand (native only)', disabled: true },
         ]}
-      />
-      <ChatPanel visible={panel === 'chat'} onClose={() => setPanel(null)} meetingId={joinInfo?.roomName} />
-      <PollsPanel visible={panel === 'polls'} onClose={() => setPanel(null)} meetingId={joinInfo?.roomName} />
-      <AiAssistantPanel
-        visible={panel === 'ai'}
-        onClose={() => setPanel(null)}
-        meetingTitle={joinInfo?.meetingTitle ?? roomCode}
       />
       <ParticipantsSheet visible={panel === 'participants'} onClose={() => setPanel(null)} participants={tiles} />
       <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} />

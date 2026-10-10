@@ -10,10 +10,11 @@ type Props = {
   trackRef?: TrackReference;
   muted?: boolean;
   isSpeaking?: boolean;
+  handRaised?: boolean;
   fullWidth?: boolean;
 };
 
-export function VideoTile({ name, trackRef, muted, isSpeaking, fullWidth }: Props) {
+export function VideoTile({ name, trackRef, muted, isSpeaking, handRaised, fullWidth }: Props) {
   const { radii } = useAppTheme();
 
   return (
@@ -33,6 +34,11 @@ export function VideoTile({ name, trackRef, muted, isSpeaking, fullWidth }: Prop
         <VideoTrack trackRef={trackRef} style={StyleSheet.absoluteFill} objectFit="cover" mirror />
       ) : (
         <Avatar name={name} size={64} />
+      )}
+      {handRaised && (
+        <View style={{ position: 'absolute', top: 10, right: 10, padding: 7, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.65)' }}>
+          <Ionicons name="hand-left" size={17} color="#F59F00" accessibilityLabel="Hand raised" />
+        </View>
       )}
       <View
         style={{

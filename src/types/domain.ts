@@ -19,13 +19,6 @@ export type Meeting = {
   hasPassword: boolean;
 };
 
-export type RecordingSummary = {
-  meetingId: string;
-  meetingTitle: string;
-  createdAt: string;
-  highlight: string;
-};
-
 export type ChatMessage = {
   id: string;
   senderId: string;

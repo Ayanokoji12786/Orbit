@@ -4,7 +4,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppText, Button, Divider, GradientBackground, IconButton } from '@/components/ui';
+import { AppText, Button, Divider, GradientBackground } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { sendSignInCode, signInWithApple } from '@/features/auth/api';
 import { useGoogleSignIn } from '@/features/auth/useGoogleSignIn';

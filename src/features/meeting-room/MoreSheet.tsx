@@ -6,7 +6,8 @@ import { AppText, BottomSheet, PressableScale } from '@/components/ui';
 type Action = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  onPress: () => void;
+  onPress?: () => void;
+  disabled?: boolean;
 };
 
 type Props = {
@@ -25,7 +26,7 @@ export function MoreSheet({ visible, onClose, actions }: Props) {
       handleColor="rgba(255,255,255,0.2)">
       <View style={{ paddingHorizontal: 8 }}>
         {actions.map((action) => (
-          <PressableScale key={action.label} onPress={action.onPress} haptic="soft">
+          <PressableScale key={action.label} onPress={action.onPress} disabled={action.disabled} haptic="soft" accessibilityLabel={action.label}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 12, paddingVertical: 14 }}>
               <View
                 style={{

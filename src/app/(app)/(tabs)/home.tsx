@@ -5,9 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, Avatar, IconButton, PressableScale, SectionHeader } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { useContacts } from '@/features/contacts/api';
-import { AiSummaryCard } from '@/features/home/AiSummaryCard';
 import { FavoriteContactsRow } from '@/features/home/FavoriteContactsRow';
-import { mockRecordingSummary } from '@/features/home/mock-data';
 import { QuickActions } from '@/features/home/QuickActions';
 import { UpcomingMeetingCard } from '@/features/home/UpcomingMeetingCard';
 import { MeetingRow } from '@/features/meetings/components/MeetingRow';
@@ -76,11 +74,6 @@ export default function Home() {
           <UpcomingMeetingCard meeting={nextMeeting} onJoin={() => router.push(`/meeting/${nextMeeting.roomCode}`)} />
         </View>
       )}
-
-      <View>
-        <SectionHeader title="AI summaries" actionLabel="View all" onAction={() => router.push('/recordings')} />
-        <AiSummaryCard summary={mockRecordingSummary} onPress={() => router.push(`/recordings/${mockRecordingSummary.meetingId}`)} />
-      </View>
 
       {favorites.length > 0 && (
         <View>

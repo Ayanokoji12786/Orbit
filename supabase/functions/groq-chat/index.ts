@@ -2,7 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
-const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')!;
+const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY');
 const GROQ_MODEL = 'openai/gpt-oss-120b';
 
 const corsHeaders = {
@@ -25,6 +25,7 @@ const MAX_CONTENT_LENGTH = 4000;
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
 
   try {
     const authHeader = req.headers.get('Authorization');
@@ -48,7 +49,15 @@ Deno.serve(async (req) => {
     }
     if (!allowed) return json({ error: 'Too many requests. Try again in a few minutes.' }, 429);
 
-    const { messages, meetingTitle } = (await req.json()) as { messages?: InMessage[]; meetingTitle?: string };
+    if (!GROQ_API_KEY) return json({ error: 'The AI assistant is not configured.' }, 503);
+    const requestBody = await req.json().catch(() => null);
+    if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
+      return json({ error: 'Invalid request body.' }, 400);
+    }
+    const { messages, meetingTitle } = requestBody as { messages?: InMessage[]; meetingTitle?: unknown };
+    if (meetingTitle !== undefined && (typeof meetingTitle !== 'string' || meetingTitle.length > 120)) {
+      return json({ error: 'Invalid meeting title.' }, 400);
+    }
 
     if (!Array.isArray(messages) || messages.length === 0) return json({ error: 'messages is required.' }, 400);
     if (messages.length > MAX_MESSAGES) return json({ error: 'Conversation is too long.' }, 400);
@@ -61,7 +70,7 @@ Deno.serve(async (req) => {
 
     const systemMessage = {
       role: 'system' as const,
-      content: `You are Orbit's in-meeting AI assistant. Be concise and helpful.${meetingTitle ? ` The meeting is titled "${meetingTitle}".` : ''} Today's date is ${new Date().toISOString().slice(0, 10)}.`,
+      content: `You are Orbit's in-meeting AI assistant. Be concise and helpful. You cannot hear the meeting or read its chat, transcript, or files. Never claim to know what participants said or decided unless the user includes it in a message.${meetingTitle ? ` The meeting is titled "${meetingTitle}".` : ''} Today's date is ${new Date().toISOString().slice(0, 10)}.`,
     };
 
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {

@@ -47,9 +47,12 @@ Deno.serve(async (req) => {
       p_window_minutes: 10,
     });
     if (rateErr) {
-      // Fail open — a limiter outage shouldn't lock everyone out of their meetings.
+      // A limiter outage must not turn password-protected rooms into an
+      // unlimited online guessing endpoint.
       console.error('check_rate_limit failed', rateErr);
-    } else if (!allowed) {
+      return json({ error: 'Meeting join is temporarily unavailable. Try again shortly.' }, 503);
+    }
+    if (!allowed) {
       return json({ error: 'Too many attempts. Try again in a few minutes.' }, 429);
     }
 
@@ -95,7 +98,14 @@ Deno.serve(async (req) => {
       name: displayName,
       ttl: '4h',
     });
-    accessToken.addGrant({ room: meeting.id, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: true });
+    accessToken.addGrant({
+      room: meeting.id,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+      canPublishData: true,
+      canUpdateOwnMetadata: true,
+    });
 
     return json({
       token: await accessToken.toJwt(),

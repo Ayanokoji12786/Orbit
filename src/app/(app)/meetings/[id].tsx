@@ -10,7 +10,7 @@ import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/api';
 import { formatClockTime, formatCountdown } from '@/utils/datetime';
 
 export default function MeetingDetail() {
-  const { colors, spacing, radii } = useAppTheme();
+  const { colors, spacing } = useAppTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const upcoming = useUpcomingMeetings();
   const past = usePastMeetings();
@@ -68,7 +68,9 @@ export default function MeetingDetail() {
         {isUpcoming ? (
           <Button label="Join meeting" onPress={() => router.push(`/meeting/${meeting.roomCode}`)} />
         ) : (
-          <Button label="View recording" variant="secondary" onPress={() => router.push(`/recordings/${meeting.id}`)} />
+          <AppText variant="caption" color="textTertiary">
+            Recordings and AI summaries are not available for this meeting.
+          </AppText>
         )}
       </ScrollView>
     </View>

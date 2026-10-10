@@ -12,6 +12,7 @@ type Props = {
   variant?: 'glass' | 'filled' | 'plain';
   tone?: 'default' | 'active' | 'danger';
   accessibilityLabel: string;
+  disabled?: boolean;
 };
 
 export function IconButton({
@@ -21,6 +22,7 @@ export function IconButton({
   variant = 'glass',
   tone = 'default',
   accessibilityLabel,
+  disabled = false,
 }: Props) {
   const { colors } = useAppTheme();
 
@@ -40,6 +42,7 @@ export function IconButton({
   return (
     <PressableScale
       onPress={onPress}
+      disabled={disabled}
       accessibilityLabel={accessibilityLabel}
       style={{
         width: size,

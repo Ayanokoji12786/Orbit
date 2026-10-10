@@ -12,12 +12,13 @@ import Animated, {
 } from 'react-native-reanimated';
 
 type Props = {
+  id: string;
   emoji: string;
   startX: number;
-  onDone: () => void;
+  onDone: (id: string) => void;
 };
 
-export function FloatingReaction({ emoji, startX, onDone }: Props) {
+export function FloatingReaction({ id, emoji, startX, onDone }: Props) {
   const translateY = useSharedValue(0);
   const translateX = useSharedValue(0);
   const opacity = useSharedValue(1);
@@ -38,11 +39,11 @@ export function FloatingReaction({ emoji, startX, onDone }: Props) {
           // Fire regardless of `finished`: an interrupted animation (backgrounding,
           // reduce-motion, unmount race) would otherwise leave this reaction in the
           // parent's list forever, accumulating invisible mounted views for the call.
-          runOnJS(onDone)();
+          runOnJS(onDone)(id);
         }),
       ),
     );
-  }, []);
+  }, [id, onDone, opacity, scale, translateX, translateY]);
 
   const style = useAnimatedStyle(() => ({
     transform: [{ translateY: translateY.get() }, { translateX: translateX.get() }, { scale: scale.get() }],

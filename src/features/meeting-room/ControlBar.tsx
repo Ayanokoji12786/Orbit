@@ -7,15 +7,16 @@ import { ReactionPicker } from './ReactionPicker';
 
 type Props = {
   muted: boolean;
-  onToggleMute: () => void;
+  onToggleMute?: () => void;
   cameraOff: boolean;
-  onToggleCamera: () => void;
-  onReact: (emoji: string) => void;
+  onToggleCamera?: () => void;
+  onReact?: (emoji: string) => void;
   onMore: () => void;
   onLeave: () => void;
+  previewOnly?: boolean;
 };
 
-export function ControlBar({ muted, onToggleMute, cameraOff, onToggleCamera, onReact, onMore, onLeave }: Props) {
+export function ControlBar({ muted, onToggleMute, cameraOff, onToggleCamera, onReact, onMore, onLeave, previewOnly = false }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   return (
@@ -24,7 +25,7 @@ export function ControlBar({ muted, onToggleMute, cameraOff, onToggleCamera, onR
         <View style={{ marginBottom: 12 }}>
           <ReactionPicker
             onSelect={(emoji) => {
-              onReact(emoji);
+              onReact?.(emoji);
               setPickerOpen(false);
             }}
           />
@@ -45,21 +46,24 @@ export function ControlBar({ muted, onToggleMute, cameraOff, onToggleCamera, onR
           name={muted ? 'mic-off' : 'mic'}
           variant="filled"
           tone={muted ? 'danger' : 'default'}
-          accessibilityLabel={muted ? 'Unmute' : 'Mute'}
+          accessibilityLabel={previewOnly ? 'Microphone unavailable in web preview' : muted ? 'Unmute' : 'Mute'}
+          disabled={previewOnly}
           onPress={onToggleMute}
         />
         <IconButton
           name={cameraOff ? 'videocam-off' : 'videocam'}
           variant="filled"
           tone={cameraOff ? 'danger' : 'default'}
-          accessibilityLabel={cameraOff ? 'Turn camera on' : 'Turn camera off'}
+          accessibilityLabel={previewOnly ? 'Camera unavailable in web preview' : cameraOff ? 'Turn camera on' : 'Turn camera off'}
+          disabled={previewOnly}
           onPress={onToggleCamera}
         />
         <IconButton
           name="happy-outline"
           variant="filled"
           tone={pickerOpen ? 'active' : 'default'}
-          accessibilityLabel="React"
+          accessibilityLabel={previewOnly ? 'Reactions unavailable in web preview' : 'React'}
+          disabled={previewOnly}
           onPress={() => setPickerOpen((p) => !p)}
         />
         <IconButton name="ellipsis-horizontal" variant="filled" accessibilityLabel="More" onPress={onMore} />

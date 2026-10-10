@@ -1,6 +1,7 @@
 import { FunctionsHttpError } from '@supabase/supabase-js';
 
 import { supabase } from './supabase';
+import { parseRoomCode } from '@/utils/meeting-links';
 
 export type LiveKitJoinInfo = {
   token: string;
@@ -17,12 +18,14 @@ export class MeetingJoinError extends Error {}
  * The LiveKit API secret never leaves that function's environment.
  */
 export async function fetchLiveKitToken(roomCode: string, password?: string): Promise<LiveKitJoinInfo> {
+  const normalizedCode = parseRoomCode(roomCode);
+  if (!normalizedCode) throw new MeetingJoinError('Enter a valid six-character meeting code.');
   if (!supabase) {
     throw new MeetingJoinError('Connect a Supabase project to enable live video.');
   }
 
   const { data, error } = await supabase.functions.invoke<LiveKitJoinInfo>('livekit-token', {
-    body: { roomCode, password },
+    body: { roomCode: normalizedCode, password },
   });
 
   if (error) {

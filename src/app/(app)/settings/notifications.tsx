@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Linking, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useFocusEffect } from 'expo-router';

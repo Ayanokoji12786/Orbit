@@ -31,7 +31,7 @@ export function AiAssistantPanel({ visible, onClose, meetingTitle }: Props) {
           leaving this input behind the keyboard. */}
       <View style={{ flex: 1 }}>
         {messages.length === 0 ? (
-          <EmptyState icon="sparkles-outline" title="Ask me anything" subtitle="Quick answers, summaries, or notes during your call." />
+          <EmptyState icon="sparkles-outline" title="Ask the assistant" subtitle="It can answer general questions. It cannot hear your meeting or read its chat." />
         ) : (
           <FlatList
             ref={listRef}

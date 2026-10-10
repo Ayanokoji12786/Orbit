@@ -15,7 +15,6 @@ export function VideoGrid() {
   const speaking = useSpeakingParticipants();
   const cameraTracks = useTracks([Track.Source.Camera]);
   const screenShareTracks = useTracks([Track.Source.ScreenShare]);
-
   const speakingIds = new Set(speaking.map((p) => p.identity));
   const localTrackRef = cameraTracks.find((t) => t.participant.identity === localParticipant.identity);
   // v1: feature one active share at a time, matching how most meeting apps handle concurrent shares.
@@ -42,6 +41,7 @@ export function VideoGrid() {
           trackRef={localTrackRef}
           muted={!isMicrophoneEnabled}
           isSpeaking={speakingIds.has(localParticipant.identity)}
+          handRaised={localParticipant.attributes['orbit.handRaised'] === 'true'}
         />
         {remoteParticipants.map((participant) => (
           <VideoTile
@@ -50,6 +50,7 @@ export function VideoGrid() {
             trackRef={cameraTracks.find((t) => t.participant.identity === participant.identity)}
             muted={!participant.isMicrophoneEnabled}
             isSpeaking={speakingIds.has(participant.identity)}
+            handRaised={participant.attributes['orbit.handRaised'] === 'true'}
           />
         ))}
       </View>
