@@ -1,5 +1,13 @@
 # Orbit development changelog
 
+## 2026-10-10 — meeting lifecycle, profiles, reminders and SQL tests (`23583ed`)
+
+- Added host-authorized meeting end/cancel, participant leave, expiring membership leases, LiveKit presence renewal, short-lived tokens, and terminal-room checks. Chat, polls, votes, whiteboard and meeting uploads now require active membership; a PostgreSQL test exposed and helped fix guest meeting-image upload denial.
+- Added editable display name/bio and private avatar upload, contact favorite/removal, profile display across Home/Settings/LiveKit, and visible sign-out/load errors. Restricted client profile writes to editable columns and made avatar reads path- and contact-scoped.
+- Added host rescheduling/cancellation, local reminder replacement/removal, notification-tap navigation, and accurate notification availability text. Signed chat image URLs now expire after five minutes.
+- Added a reproducible PGlite harness that applies all 12 local migrations with Supabase schema shims and exercises SQL grants/RLS. `npm test` passes 13/13; TypeScript, fresh lint, web export (55 routes), iOS JavaScript export and diff checks pass.
+- These are local code and PostgreSQL results. Hosted Supabase/LiveKit, native notification/avatar behavior, authenticated iOS/Android, and two-device collaboration remain unverified. No migration or Edge Function was deployed.
+
 ## 2026-10-10 — shared whiteboard (`cd77b07`)
 
 - Replaced native local-only strokes with normalized coordinates and a participant-scoped Supabase event log. Initial fetch and realtime inserts merge by sequence; late joiners and reconnects replay the same latest 500 changes. Clear is host-only; the web preview stays local.

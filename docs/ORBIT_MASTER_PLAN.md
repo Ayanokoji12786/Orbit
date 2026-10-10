@@ -10,11 +10,11 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 
 ## Milestones
 
-1. **Security and truthful controls:** close authorization and rate-limit defects; make visible actions work or communicate unavailability; validate migrations in an isolated database.
-2. **Accounts and contact flows:** profile editing, recovery, deletion, contact removal, session states, and two-account authorization tests.
-3. **Messaging and meetings:** attachments, offline/reconnect, room lifecycle, password UI, host controls, reliable call recovery, multi-user tests.
+1. **Security and truthful controls:** local quota, password, membership, and Storage changes now pass PGlite PostgreSQL checks; isolated hosted Supabase/LiveKit verification remains.
+2. **Accounts and contact flows:** profile edit/private avatar and contact removal are implemented locally; recovery, deletion, session states, and two-account authorization remain.
+3. **Messaging and meetings:** lifecycle and host end/cancel are implemented locally; attachments, offline/reconnect, host moderation, reliable call recovery, and multi-user tests remain.
 4. **Collaboration:** secure synchronized whiteboard, reactions, hand state, polls, screen sharing, real-time tests.
-5. **Notifications and AI:** rescheduling/cancellation, notification navigation; consent-gated transcription, notes, summaries, action items, translation, transcript search and context assistance where configured. Otherwise display clear unavailable states.
+5. **Notifications and AI:** local rescheduling/cancellation and reminder navigation are implemented; cross-device reminder reconciliation and consent-gated transcription, notes, summaries, action items, translation, transcript search, and context assistance remain.
 6. **Release QA:** route-by-route accessibility and platform review, iOS/Android builds and device/simulator journeys, dependency/security audit, documentation, push and PR into `main`.
 
 ## Feature inventory from source (not runtime verification)
@@ -22,15 +22,15 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 | Area | Current classification | Evidence / gap |
 | --- | --- | --- |
 | Email OTP, Google, Apple, session persistence, sign-out | Implemented, unverified | Auth API and screens exist; provider and device checks pending. |
-| Account recovery, deletion, profile edit | Missing or UI-only | Edit/profile privacy screens are stubs; no recovery or deletion flow. |
-| Contacts and direct chat | Partially implemented | Email lookup, add, favorite, DM and Realtime code exist; remove, reconnection, multi-user tests absent. |
-| Image/file attachments | Partial | Private image upload and signed read exist; general files and upload lifecycle are absent. |
-| Meeting creation/join/password/LiveKit | Partial | Creation, token issuance, native room, host password controls, and guest password entry exist locally; atomic password RPC and device/backend behavior need validation and deployment. Lifecycle remains incomplete. |
+| Account recovery, deletion, profile edit | Partial | Name/bio/private avatar edit works in code; account recovery/deletion and hosted/device verification remain. |
+| Contacts and direct chat | Partially implemented | Email lookup, add/remove, favorite, DM and Realtime code exist; reconnect and multi-user tests absent. |
+| Image/file attachments | Partial | Private chat images and avatars have signed reads; general files and upload lifecycle are absent. |
+| Meeting creation/join/password/LiveKit | Partial | Host end/cancel, leave, 5-minute access leases, 60-second tokens, password controls, and token revocation code exist; hosted/device behavior needs validation and deployment. |
 | In-call chat and polls | Implemented, unverified | Supabase tables, RLS, subscriptions and UI exist; two-user tests needed. |
 | Reactions and Raise Hand | Implemented locally, unverified | LiveKit data/attributes changes on this branch; requires new token function deployment and two-device test. |
-| Whiteboard | Implemented locally, unverified | Native strokes now use normalized coordinates and participant-scoped Supabase events with realtime replay and host-only clear; latest 500 changes retained. Migration/deployment/two-device test pending. Web remains a local preview. |
+| Whiteboard | Implemented locally, unverified | Normalized participant-scoped events, replay, and host-only clear pass isolated SQL tests; deployment/two-device sync pending. Latest 500 changes retained; web is a local preview. |
 | Screen sharing and participant controls | Partial | Native share attempt exists; no host moderation; web preview now labels native-only controls. |
-| Reminders and notifications | Partial | Local reminder scheduling exists; in-app inbox now shows an honest unavailable state; cancel/reschedule/navigation absent. |
+| Reminders and notifications | Partial | Local scheduling, replacement/cancellation, permission handling, and tap navigation exist; device tests, cross-device reconciliation, and in-app inbox remain. |
 | AI assistant | Implemented, unverified | `groq-chat` validates auth/input, rate-limits and proxies Groq; key and end-to-end behavior unverified. It has no meeting audio/transcript context. |
 | Summaries, notes, action items, captions, transcription, translation, search | Missing / unavailable | Fabricated home summary and recording content removed; consent and processing pipeline absent. |
 | Settings and accessibility | Partial / UI-only | Appearance and accessibility screens exist; privacy and devices are stubs; complete route review pending. |
