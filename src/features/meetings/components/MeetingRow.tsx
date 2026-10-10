@@ -40,8 +40,8 @@ export function MeetingRow({ meeting, onPress }: Props) {
           {meeting.title}
         </AppText>
         <AppText variant="caption" color="textSecondary">
-          {isPast ? formatRelativeDay(meeting.startsAt) : formatClockTime(meeting.startsAt)} ·{' '}
-          {meeting.durationMinutes}m
+          {meeting.cancelledAt ? 'Cancelled' : meeting.endedAt ? 'Ended' : isPast ? formatRelativeDay(meeting.startsAt) : formatClockTime(meeting.startsAt)}
+          {!meeting.cancelledAt && !meeting.endedAt ? ` · ${meeting.durationMinutes}m` : ''}
         </AppText>
       </View>
     </PressableScale>

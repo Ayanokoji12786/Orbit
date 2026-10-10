@@ -3,24 +3,23 @@ import { ScrollView, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
 
-import { AppText, Avatar, Button, Chip, EmptyState } from '@/components/ui';
+import { AppText, Avatar, Button, Chip, DateTimeField, EmptyState } from '@/components/ui';
 import { ScreenHeader } from '@/components/navigation/ScreenHeader';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { useNow } from '@/hooks/use-now';
-import { setMeetingPassword, usePastMeetings, useUpcomingMeetings } from '@/features/meetings/api';
+import { cancelMeeting, rescheduleMeeting, setMeetingPassword, useHostMeeting } from '@/features/meetings/api';
+import { cancelMeetingReminder, scheduleMeetingReminder } from '@/lib/notifications';
 import { formatClockTime, formatCountdown } from '@/utils/datetime';
 
 export default function MeetingDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  return <MeetingDetailForId key={id} id={id} />;
+  const { id, reminder } = useLocalSearchParams<{ id: string; reminder?: string }>();
+  return <MeetingDetailForId key={id} id={id} reminder={reminder} />;
 }
 
-function MeetingDetailForId({ id }: { id: string }) {
+function MeetingDetailForId({ id, reminder }: { id: string; reminder?: string }) {
   const { colors, radii, spacing } = useAppTheme();
-  const upcoming = useUpcomingMeetings();
-  const past = usePastMeetings();
+  const { meeting, loading, error: loadError } = useHostMeeting(id);
   const now = useNow();
-  const meeting = [...upcoming, ...past].find((m) => m.id === id);
   const [editingPassword, setEditingPassword] = useState(false);
   const [password, setPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
@@ -28,6 +27,56 @@ function MeetingDetailForId({ id }: { id: string }) {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
   const [passwordOverride, setPasswordOverride] = useState<boolean | null>(null);
+  const [editingStart, setEditingStart] = useState(false);
+  const [nextStart, setNextStart] = useState(new Date());
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [confirmCancellation, setConfirmCancellation] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleNotice, setScheduleNotice] = useState<string | null>(null);
+
+  const saveStart = async () => {
+    if (!meeting || savingSchedule) return;
+    setSavingSchedule(true);
+    setScheduleError(null);
+    try {
+      const updated = await rescheduleMeeting(meeting.id, nextStart);
+      setEditingStart(false);
+      try {
+        const result = await scheduleMeetingReminder(updated);
+        setScheduleNotice(result === 'scheduled'
+          ? 'Meeting rescheduled. This device will remind you 10 minutes before it starts.'
+          : result === 'permissionDenied'
+            ? 'Meeting rescheduled. Enable device notifications to receive a reminder.'
+            : 'Meeting rescheduled. It starts too soon for a 10-minute reminder.');
+      } catch {
+        setScheduleNotice('Meeting rescheduled, but this device could not update its reminder.');
+      }
+    } catch (err) {
+      setScheduleError(err instanceof Error ? err.message : 'Could not reschedule the meeting.');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const confirmCancel = async () => {
+    if (!meeting || savingSchedule) return;
+    setSavingSchedule(true);
+    setScheduleError(null);
+    try {
+      await cancelMeeting(meeting.id);
+      setConfirmCancellation(false);
+      try {
+        await cancelMeetingReminder(meeting.id);
+        setScheduleNotice('Meeting cancelled. Its reminder was removed from this device.');
+      } catch {
+        setScheduleNotice('Meeting cancelled, but this device could not remove its reminder.');
+      }
+    } catch (err) {
+      setScheduleError(err instanceof Error ? err.message : 'Could not cancel the meeting.');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
 
   const changePassword = async (nextPassword: string | null) => {
     if (!meeting || savingPassword) return;
@@ -59,7 +108,11 @@ function MeetingDetailForId({ id }: { id: string }) {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <ScreenHeader title="Meeting Details" />
         <View style={{ flex: 1, justifyContent: 'center' }}>
-          <EmptyState icon="calendar-outline" title="Meeting not found" subtitle="It may have been cancelled or already ended." />
+          <EmptyState
+            icon="calendar-outline"
+            title={loading ? 'Loading meeting' : loadError ? 'Could not load meeting' : 'Meeting not found'}
+            subtitle={loadError ?? (loading ? 'Checking your meeting details.' : 'Check the meeting link or return to your meetings.')}
+          />
         </View>
       </View>
     );
@@ -75,7 +128,7 @@ function MeetingDetailForId({ id }: { id: string }) {
       <ScreenHeader title="Meeting Details" />
       <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.lg }}>
         <View>
-          <Chip label={isUpcoming ? formatCountdown(meeting.startsAt) : isWithinScheduledWindow ? 'Started' : 'Past'} tone={isUpcoming ? 'primary' : 'neutral'} />
+          <Chip label={meeting.cancelledAt ? 'Cancelled' : meeting.endedAt ? 'Ended' : isUpcoming ? formatCountdown(meeting.startsAt) : isWithinScheduledWindow ? 'Started' : 'Past'} tone={isUpcoming && !meeting.cancelledAt && !meeting.endedAt ? 'primary' : 'neutral'} />
           <AppText variant="displayMedium" style={{ marginTop: spacing.sm }}>
             {meeting.title}
           </AppText>
@@ -83,6 +136,47 @@ function MeetingDetailForId({ id }: { id: string }) {
             {formatClockTime(meeting.startsAt)} · {meeting.durationMinutes} min
           </AppText>
         </View>
+
+        {reminder && reminder !== 'scheduled' && (
+          <AppText variant="caption" color="textSecondary">
+            {reminder === 'permissionDenied'
+              ? 'Meeting saved. Enable device notifications to receive a reminder.'
+              : reminder === 'tooSoon'
+                ? 'Meeting saved. It starts too soon for a 10-minute reminder.'
+                : 'Meeting saved, but this device could not schedule its reminder.'}
+          </AppText>
+        )}
+
+        {isUpcoming && !meeting.cancelledAt && !meeting.endedAt && (
+          <View style={{ gap: spacing.sm }}>
+            <AppText variant="headline">Schedule</AppText>
+            {editingStart ? (
+              <View style={{ gap: spacing.sm }}>
+                <DateTimeField label="New start time" value={nextStart} onChange={setNextStart} minimumDate={new Date()} />
+                <Button label="Save new time" onPress={() => { void saveStart(); }} loading={savingSchedule} />
+                <Button label="Keep current time" variant="ghost" onPress={() => setEditingStart(false)} />
+              </View>
+            ) : (
+              <Button label="Reschedule meeting" variant="secondary" onPress={() => { setNextStart(new Date(meeting.startsAt)); setEditingStart(true); setScheduleNotice(null); }} />
+            )}
+          </View>
+        )}
+
+        {(isUpcoming || meeting.cancelledAt) && !meeting.endedAt && (
+          <View style={{ gap: spacing.sm }}>
+            {confirmCancellation ? (
+              <>
+                <AppText variant="caption" color="textSecondary">Everyone in this meeting will be disconnected, and its code will stop working.</AppText>
+                <Button label="Confirm cancellation" variant="destructive" onPress={() => { void confirmCancel(); }} loading={savingSchedule} />
+                <Button label="Keep meeting" variant="ghost" onPress={() => setConfirmCancellation(false)} />
+              </>
+            ) : (
+              <Button label={meeting.cancelledAt ? 'Retry room cleanup' : 'Cancel meeting'} variant="ghost" onPress={() => setConfirmCancellation(true)} />
+            )}
+          </View>
+        )}
+        {scheduleError && <AppText variant="caption" color="error">{scheduleError}</AppText>}
+        {scheduleNotice && <AppText variant="caption" color="success">{scheduleNotice}</AppText>}
 
         {meeting.participants.length > 0 && (
           <View>
@@ -105,7 +199,7 @@ function MeetingDetailForId({ id }: { id: string }) {
           </AppText>
         </View>
 
-        {isWithinScheduledWindow && (
+        {isWithinScheduledWindow && !meeting.cancelledAt && !meeting.endedAt && (
           <View style={{ gap: spacing.sm }}>
             <AppText variant="headline">Meeting password</AppText>
             <AppText variant="caption" color="textSecondary">
@@ -154,7 +248,7 @@ function MeetingDetailForId({ id }: { id: string }) {
           </View>
         )}
 
-        {isWithinScheduledWindow ? (
+        {isWithinScheduledWindow && !meeting.cancelledAt && !meeting.endedAt ? (
           <Button label="Join meeting" onPress={() => router.push(`/meeting/${meeting.roomCode}`)} />
         ) : (
           <AppText variant="caption" color="textTertiary">

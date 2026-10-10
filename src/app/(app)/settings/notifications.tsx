@@ -10,23 +10,29 @@ import { ensureNotificationPermission } from '@/lib/notifications';
 
 export default function NotificationSettings() {
   const { colors, spacing, radii } = useAppTheme();
-  const [status, setStatus] = useState<Notifications.PermissionStatus | null>(null);
+  const [granted, setGranted] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
-    Notifications.getPermissionsAsync().then((res) => setStatus(res.status));
+    Notifications.getPermissionsAsync()
+      .then((res) => {
+        setGranted(res.granted || res.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL);
+        setError(null);
+      })
+      .catch(() => setError('Could not check device notification settings.'));
   }, []);
 
   useFocusEffect(refresh);
 
   const requestPermission = async () => {
-    const granted = await ensureNotificationPermission();
-    if (!granted) {
-      Linking.openSettings();
+    try {
+      const enabled = await ensureNotificationPermission();
+      if (!enabled) await Linking.openSettings();
+      refresh();
+    } catch {
+      setError('Could not open device notification settings.');
     }
-    refresh();
   };
-
-  const granted = status === Notifications.PermissionStatus.GRANTED;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -47,16 +53,18 @@ export default function NotificationSettings() {
               A local reminder 10 minutes before meetings you schedule.
             </AppText>
           </View>
-          <Chip label={granted ? 'On' : 'Off'} tone={granted ? 'success' : 'neutral'} />
+          <Chip label={granted === null ? 'Checking' : granted ? 'On' : 'Off'} tone={granted ? 'success' : 'neutral'} />
         </View>
 
-        {!granted && (
+        {granted === false && (
           <Button label="Enable notifications" onPress={requestPermission} />
         )}
 
+        {error && <AppText variant="caption" color="error">{error}</AppText>}
+
         <AppText variant="caption" color="textTertiary">
-          Recording-ready, AI-summary, and invitation notifications are sent from Orbit's backend and
-          switch on once Supabase + push are wired up (Phase 2/4).
+          Reminders are scheduled on this device when you create or reschedule a meeting here. Push notifications,
+          recording alerts, and invitation alerts are not available yet.
         </AppText>
       </View>
     </View>

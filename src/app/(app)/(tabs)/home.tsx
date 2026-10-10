@@ -10,6 +10,7 @@ import { QuickActions } from '@/features/home/QuickActions';
 import { UpcomingMeetingCard } from '@/features/home/UpcomingMeetingCard';
 import { MeetingRow } from '@/features/meetings/components/MeetingRow';
 import { usePastMeetings, useUpcomingMeetings } from '@/features/meetings/api';
+import { useProfile } from '@/features/profile/api';
 import { useNow } from '@/hooks/use-now';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -25,10 +26,11 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const now = useNow();
   const email = useAuthStore((s) => s.email);
-  const displayName = email ? email.split('@')[0] : 'there';
+  const { profile } = useProfile();
+  const displayName = profile?.displayName || (email ? email.split('@')[0] : 'there');
   const upcoming = useUpcomingMeetings();
-  const recent = usePastMeetings().slice(0, 3);
-  const nextMeeting = upcoming[0];
+  const recent = usePastMeetings().filter((meeting) => !meeting.cancelledAt).slice(0, 3);
+  const nextMeeting = upcoming.find((meeting) => !meeting.cancelledAt && !meeting.endedAt);
   const { contacts } = useContacts();
   const favorites = contacts.filter((c) => c.isFavorite);
 
@@ -57,7 +59,7 @@ export default function Home() {
             onPress={() => router.push('/notifications')}
           />
           <PressableScale onPress={() => router.push('/profile')} haptic="soft" accessibilityLabel="Profile">
-            <Avatar name={displayName} size={44} />
+            <Avatar name={displayName} uri={profile?.avatarUrl} size={44} />
           </PressableScale>
         </View>
       </View>

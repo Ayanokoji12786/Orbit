@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { useAppTheme } from '@/design-system/useAppTheme';
+import { useAvatarImageUrl } from '@/features/profile/useAvatarImageUrl';
 
 import { AppText } from './AppText';
 
@@ -24,16 +26,19 @@ function initialsFor(name: string) {
 
 export function Avatar({ uri, name, size = 44, status = 'none' }: Props) {
   const { colors } = useAppTheme();
+  const imageUrl = useAvatarImageUrl(uri);
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const statusColor =
     status === 'online' ? colors.success : status === 'away' ? colors.warning : colors.textTertiary;
 
   return (
     <View style={{ width: size, height: size }}>
-      {uri ? (
+      {imageUrl && imageUrl !== failedImageUrl ? (
         <Image
-          source={{ uri }}
+          source={{ uri: imageUrl }}
           style={{ width: size, height: size, borderRadius: size / 2 }}
           contentFit="cover"
+          onError={() => setFailedImageUrl(imageUrl)}
         />
       ) : (
         <LinearGradient

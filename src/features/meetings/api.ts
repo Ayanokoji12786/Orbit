@@ -22,6 +22,8 @@ type MeetingRow = {
   starts_at: string;
   duration_minutes: number;
   has_password: boolean;
+  cancelled_at: string | null;
+  ended_at: string | null;
 };
 
 function mapMeeting(row: MeetingRow): Meeting {
@@ -34,6 +36,8 @@ function mapMeeting(row: MeetingRow): Meeting {
     durationMinutes: row.duration_minutes ?? 30,
     participants: [],
     hasPassword: Boolean(row.has_password),
+    cancelledAt: row.cancelled_at ?? null,
+    endedAt: row.ended_at ?? null,
   };
 }
 
@@ -74,6 +78,92 @@ export async function setMeetingPassword(meetingId: string, password: string | n
   }
   if (typeof data?.hasPassword !== 'boolean') throw new Error('Could not confirm the meeting password change.');
   return data.hasPassword;
+}
+
+/** Moves a host's future meeting. The database restricts writes to scheduling fields. */
+export async function rescheduleMeeting(meetingId: string, startsAt: Date): Promise<Meeting> {
+  if (!supabase) throw new Error('Connect a Supabase project to reschedule meetings.');
+  const uid = useAuthStore.getState().uid;
+  if (!uid) throw new Error('Sign in required.');
+  if (!Number.isFinite(startsAt.getTime()) || startsAt.getTime() <= Date.now()) {
+    throw new Error('Choose a future start time.');
+  }
+  const { data, error } = await supabase
+    .from('meetings')
+    .update({ starts_at: startsAt.toISOString() })
+    .eq('id', meetingId)
+    .eq('host_id', uid)
+    .is('cancelled_at', null)
+    .is('ended_at', null)
+    .gt('starts_at', new Date().toISOString())
+    .select()
+    .single();
+  if (error) throw error;
+  return mapMeeting(data as MeetingRow);
+}
+
+/** Cancels the meeting in Postgres and removes any active LiveKit room. */
+export async function cancelMeeting(meetingId: string): Promise<void> {
+  if (!supabase) throw new Error('Connect a Supabase project to cancel meetings.');
+  const { data, error } = await supabase.functions.invoke<{ cancelled: boolean }>('meeting-lifecycle', {
+    body: { action: 'cancel', meetingId },
+  });
+  if (error) {
+    const body = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : null;
+    throw new Error(typeof body?.error === 'string' ? body.error : 'Could not cancel the meeting.');
+  }
+  if (data?.cancelled !== true) throw new Error('Could not confirm meeting cancellation.');
+}
+
+/** Fetches one host-owned meeting, including older or cancelled rows outside list limits. */
+export function useHostMeeting(meetingId: string): { meeting: Meeting | null; loading: boolean; error: string | null } {
+  const uid = useAuthStore((state) => state.uid);
+  const [result, setResult] = useState<{ ownerId: string | null; meetingId: string; meeting: Meeting | null; loading: boolean; error: string | null }>({
+    ownerId: null,
+    meetingId,
+    meeting: null,
+    loading: true,
+    error: null,
+  });
+
+  useEffect(() => {
+    if (!supabase || !uid || !meetingId) return;
+    const client = supabase;
+    let disposed = false;
+    let latestRequest = 0;
+    const load = async () => {
+      const request = ++latestRequest;
+      const { data, error } = await client.from('meetings')
+        .select('*')
+        .eq('id', meetingId)
+        .eq('host_id', uid)
+        .maybeSingle();
+      if (disposed || request !== latestRequest) return;
+      setResult({
+        ownerId: uid,
+        meetingId,
+        meeting: data ? mapMeeting(data as MeetingRow) : null,
+        loading: false,
+        error: error ? 'Could not load this meeting.' : null,
+      });
+    };
+
+    void load();
+    const channel = client.channel(uniqueChannel(`meeting:${meetingId}`))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings', filter: `id=eq.${meetingId}` }, load)
+      .subscribe();
+    return () => {
+      disposed = true;
+      void client.removeChannel(channel);
+    };
+  }, [meetingId, uid]);
+
+  if (!supabase) return { meeting: null, loading: false, error: 'Connect a Supabase project to view meetings.' };
+  if (!uid) return { meeting: null, loading: false, error: 'Sign in required.' };
+  if (result.ownerId !== uid || result.meetingId !== meetingId) {
+    return { meeting: null, loading: true, error: null };
+  }
+  return result;
 }
 
 /**

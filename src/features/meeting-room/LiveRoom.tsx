@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ComponentType, type ElementRef, type Ref } from 'react';
-import { ActivityIndicator, findNodeHandle, NativeModules, Platform, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Alert, AppState, findNodeHandle, NativeModules, Platform, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LiveKitRoom, registerGlobals, useDataChannel, useLocalParticipant, useRemoteParticipants, useRoomContext } from '@livekit/react-native';
 import { ScreenCapturePickerView } from '@livekit/react-native-webrtc';
-import { RoomEvent } from 'livekit-client';
+import { ConnectionState, RoomEvent } from 'livekit-client';
 
 import { AppText, Button, IconButton, PressableScale } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
@@ -20,6 +20,7 @@ import { ParticipantsSheet } from './ParticipantsSheet';
 import { PollsPanel } from './PollsPanel';
 import { VideoGrid } from './VideoGrid';
 import { WhiteboardOverlay } from './WhiteboardOverlay';
+import { changeLiveMeeting, MeetingLifecycleError, renewLiveMeeting } from './meeting-lifecycle-api';
 
 registerGlobals();
 
@@ -85,7 +86,12 @@ export function LiveRoom({ roomCode, password }: Props) {
       audio
       video={false}
       connect
-      onDisconnected={() => router.back()}
+      onDisconnected={() => {
+        // Final transport disconnects can happen without pressing Leave. The
+        // lease still expires if this request cannot reach the backend.
+        void changeLiveMeeting('leave', joinInfo.roomName).catch(() => {});
+        router.back();
+      }}
       onError={(err) => setError(err.message)}>
       {/* Keyed so panels, reactions, chat and the AI conversation don't carry into a new meeting. */}
       <RoomContent key={joinInfo.roomName} meetingId={joinInfo.roomName} meetingTitle={joinInfo.meetingTitle} isHost={joinInfo.isHost} />
@@ -139,6 +145,8 @@ function RoomContent({ meetingId, meetingTitle, isHost }: { meetingId: string; m
   // An attribute event re-renders this room and its existing participant tiles.
   const [, setAttributesRevision] = useState(0);
   const [roomActionError, setRoomActionError] = useState<string | null>(null);
+  const [renewalError, setRenewalError] = useState<string | null>(null);
+  const roomActionInFlight = useRef(false);
   const { message: reactionMessage, send: sendReaction } = useDataChannel('orbit.reaction');
   const screenSharePickerRef = useRef<ScreenCapturePickerViewRef>(null);
 
@@ -147,6 +155,62 @@ function RoomContent({ meetingId, meetingTitle, isHost }: { meetingId: string; m
     room.on(RoomEvent.ParticipantAttributesChanged, onAttributesChanged);
     return () => { room.off(RoomEvent.ParticipantAttributesChanged, onAttributesChanged); };
   }, [room]);
+
+  useEffect(() => {
+    let mounted = true;
+    const renew = () => {
+      if (room.state !== ConnectionState.Connected) return;
+      void renewLiveMeeting(meetingId).then(
+        () => { if (mounted) setRenewalError(null); },
+        (error: unknown) => {
+          if (!mounted) return;
+          if (error instanceof MeetingLifecycleError && error.status === 403) {
+            // The server has revoked this participant or ended the meeting.
+            void room.disconnect().catch(() => {});
+            return;
+          }
+          setRenewalError('Meeting access could not be renewed. Check your connection or rejoin.');
+        },
+      );
+    };
+    const timer = setInterval(renew, 60_000);
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') renew();
+    });
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+      appStateSubscription.remove();
+    };
+  }, [meetingId, room]);
+
+  const changeRoomState = async (action: 'leave' | 'end') => {
+    if (roomActionInFlight.current) return;
+    roomActionInFlight.current = true;
+    setPanel(null);
+    setRoomActionError(null);
+    try {
+      await changeLiveMeeting(action, meetingId);
+      await room.disconnect();
+    } catch (err) {
+      if (action === 'leave' && err instanceof MeetingLifecycleError && err.databaseUpdated) {
+        // The database already revoked access. Disconnect locally even if the
+        // room service is temporarily unavailable.
+        await room.disconnect().catch(() => {});
+        return;
+      }
+      setRoomActionError(err instanceof Error ? err.message : 'Could not update this meeting. Try again.');
+    } finally {
+      roomActionInFlight.current = false;
+    }
+  };
+
+  const confirmEndMeeting = () => {
+    Alert.alert('End meeting for everyone?', 'Everyone will be disconnected and this meeting cannot be reopened.', [
+      { text: 'Keep meeting', style: 'cancel' },
+      { text: 'End meeting', style: 'destructive', onPress: () => { void changeRoomState('end'); } },
+    ]);
+  };
 
   const addReaction = useCallback((emoji: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -264,7 +328,7 @@ function RoomContent({ meetingId, meetingTitle, isHost }: { meetingId: string; m
         />
       ))}
 
-      {(screenShareError || roomActionError) && (
+      {(screenShareError || roomActionError || renewalError) && (
         <View
           style={{
             position: 'absolute',
@@ -275,7 +339,7 @@ function RoomContent({ meetingId, meetingTitle, isHost }: { meetingId: string; m
           }}>
           <View style={{ backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 }}>
             <AppText variant="caption" color="error" style={{ textAlign: 'center' }}>
-              {screenShareError || roomActionError}
+              {screenShareError || roomActionError || renewalError}
             </AppText>
           </View>
         </View>
@@ -289,7 +353,7 @@ function RoomContent({ meetingId, meetingTitle, isHost }: { meetingId: string; m
           onToggleCamera={() => localParticipant.setCameraEnabled(!isCameraEnabled)}
           onReact={spawnReaction}
           onMore={() => setPanel('more')}
-          onLeave={() => router.back()}
+          onLeave={() => { void changeRoomState('leave'); }}
         />
       </View>
 
@@ -297,6 +361,7 @@ function RoomContent({ meetingId, meetingTitle, isHost }: { meetingId: string; m
         visible={panel === 'more'}
         onClose={() => setPanel(null)}
         actions={[
+          ...(isHost ? [{ icon: 'close-circle-outline' as const, label: 'End meeting for everyone', onPress: confirmEndMeeting }] : []),
           { icon: 'chatbubble-outline', label: 'Chat', onPress: () => setPanel('chat') },
           { icon: 'brush-outline', label: 'Whiteboard', onPress: () => setPanel('whiteboard') },
           { icon: 'stats-chart-outline', label: 'Polls', onPress: () => setPanel('polls') },

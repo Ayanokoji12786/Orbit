@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import bcrypt from 'npm:bcryptjs@2.4.3';
-import { AccessToken } from 'npm:livekit-server-sdk@2.9.2';
+import { AccessToken } from 'npm:livekit-server-sdk@2.19.1';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -25,6 +25,7 @@ function json(body: unknown, status = 200) {
  */
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+  if (req.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
 
   try {
     const authHeader = req.headers.get('Authorization');
@@ -36,8 +37,13 @@ Deno.serve(async (req) => {
     if (userErr || !userData.user) return json({ error: 'Sign in required.' }, 401);
 
     const uid = userData.user.id;
-    const displayName =
-      (userData.user.user_metadata?.full_name as string | undefined) ?? userData.user.email ?? 'Guest';
+    const { data: profile } = await userClient.from('users')
+      .select('display_name').eq('id', uid).maybeSingle();
+    const displayName = (
+      (typeof profile?.display_name === 'string' && profile.display_name.trim()) ||
+      (typeof userData.user.user_metadata?.full_name === 'string' && userData.user.user_metadata.full_name.trim()) ||
+      userData.user.email || 'Guest'
+    ).slice(0, 80);
 
     // Destructure the error: without it any RPC failure yields data === null, which
     // reads as "not allowed" and 429s every request with a misleading message.
@@ -56,19 +62,27 @@ Deno.serve(async (req) => {
       return json({ error: 'Too many attempts. Try again in a few minutes.' }, 429);
     }
 
-    const { roomCode, password } = (await req.json()) as { roomCode?: string; password?: string };
-    const trimmedCode = roomCode?.trim();
-    if (!trimmedCode) return json({ error: 'roomCode is required.' }, 400);
+    const body = await req.json().catch(() => null) as { roomCode?: unknown; password?: unknown } | null;
+    const trimmedCode = typeof body?.roomCode === 'string' ? body.roomCode.trim().toLowerCase() : '';
+    const password = typeof body?.password === 'string' ? body.password : undefined;
+    if (!/^[a-z0-9]{6}$/.test(trimmedCode)) return json({ error: 'A valid six-character room code is required.' }, 400);
 
-    // Service-role client bypasses RLS for the meeting lookup, secret check, and participant upsert.
+    // Service-role client bypasses RLS for meeting and secret lookup. The join
+    // RPC is the only privileged writer of participant membership.
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    const { data: meeting } = await admin
+    const { data: meeting, error: meetingError } = await admin
       .from('meetings')
-      .select('id, title, has_password, host_id')
+      .select('id, title, has_password, host_id, ended_at, cancelled_at')
       .eq('room_code', trimmedCode)
       .maybeSingle();
+    if (meetingError) {
+      console.error('meeting lookup failed', meetingError);
+      return json({ error: 'Meeting join is temporarily unavailable. Try again shortly.' }, 503);
+    }
     if (!meeting) return json({ error: 'Meeting not found.' }, 404);
+    if (meeting.cancelled_at) return json({ error: 'This meeting was cancelled.' }, 410);
+    if (meeting.ended_at) return json({ error: 'This meeting has ended.' }, 410);
 
     if (meeting.has_password) {
       const { data: secret } = await admin
@@ -83,20 +97,25 @@ Deno.serve(async (req) => {
       }
     }
 
-    // This row is what every participant-scoped RLS policy checks, so a silent failure
-    // here means the user joins the call but can't see or send chat/polls at all.
-    const { error: participantErr } = await admin
-      .from('meeting_participants')
-      .upsert({ meeting_id: meeting.id, user_id: uid, joined_at: new Date().toISOString() }, { onConflict: 'meeting_id,user_id' });
+    // Only this service-role caller may activate a participant row. The RPC
+    // locks the meeting against end/cancel so a late request cannot reopen it.
+    const { error: participantErr } = await admin.rpc('join_meeting_for_token', {
+      p_meeting_id: meeting.id,
+      p_user_id: uid,
+    });
     if (participantErr) {
-      console.error('meeting_participants upsert failed', participantErr);
+      console.error('join_meeting_for_token failed', participantErr);
+      if (participantErr.code === '42501') return json({ error: 'This meeting is no longer open.' }, 410);
       return json({ error: 'Could not join this meeting. Try again.' }, 500);
     }
 
     const accessToken = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
       identity: uid,
       name: displayName,
-      ttl: '4h',
+      // Existing tokens can otherwise reconnect after a host ends the room.
+      // Connected media sessions are unaffected by token expiry; the lifecycle
+      // endpoint also deletes the room or removes an individual participant.
+      ttl: '60s',
     });
     accessToken.addGrant({
       room: meeting.id,

@@ -38,9 +38,15 @@ export default function NewMeeting() {
     setError(null);
     setScheduling(true);
     try {
+      if (startsAt.getTime() <= Date.now()) throw new Error('Choose a future start time.');
       const meeting = await createMeeting({ title: title.trim(), startsAt, durationMinutes: 30 });
-      await scheduleMeetingReminder(meeting);
-      router.back();
+      let reminder: 'scheduled' | 'tooSoon' | 'permissionDenied' | 'failed' = 'failed';
+      try {
+        reminder = await scheduleMeetingReminder(meeting);
+      } catch {
+        // The meeting is already saved. Show its details instead of offering a second creation attempt.
+      }
+      router.replace({ pathname: '/meetings/[id]', params: { id: meeting.id, reminder } });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not schedule the meeting.');
     } finally {
@@ -101,8 +107,8 @@ export default function NewMeeting() {
           onPress={schedule}
         />
         <AppText variant="caption" color="textTertiary" style={{ textAlign: 'center' }}>
-          Reminds you 10 minutes before it starts. Inviting specific people is coming soon — for now, share
-          the meeting code from the meeting screen.
+          If notifications are allowed and you schedule at least 10 minutes ahead, this device will remind you
+          10 minutes before the meeting. Share the meeting code from the meeting screen.
         </AppText>
       </View>
     </GradientBackground>

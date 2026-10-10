@@ -24,15 +24,19 @@ function mapContact(row: ContactRow): Contact {
 }
 
 /** This user's contacts (their own rolodex — adding someone doesn't require their consent). */
-export function useContacts(): { contacts: Contact[]; loading: boolean; error: string | null } {
+export function useContacts(): { contacts: Contact[]; loading: boolean; error: string | null; retry: () => void } {
   const uid = useAuthStore((s) => s.uid);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadedUid, setLoadedUid] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
 
   useEffect(() => {
     if (!supabase || !uid) {
       setContacts([]);
+      setLoadedUid(uid);
+      setError(!supabase ? 'Connect a Supabase project to load contacts.' : 'Sign in to load contacts.');
       setLoading(false);
       return;
     }
@@ -55,10 +59,12 @@ export function useContacts(): { contacts: Contact[]; loading: boolean; error: s
             // Keep whatever is already on screen — blanking the list on a transient
             // network error renders a misleading "No contacts yet" empty state.
             setError(selErr.message);
+            setLoadedUid(uid);
             setLoading(false);
             return;
           }
           setError(null);
+          setLoadedUid(uid);
           // supabase-js types an embedded resource as an array because it can't infer
           // FK cardinality without generated DB types; `contact_id` is a to-one FK, so
           // PostgREST actually returns a single object here.
@@ -77,9 +83,14 @@ export function useContacts(): { contacts: Contact[]; loading: boolean; error: s
       cancelled = true;
       client.removeChannel(channel);
     };
-  }, [uid]);
+  }, [uid, revision]);
 
-  return { contacts, loading, error };
+  return {
+    contacts: loadedUid === uid ? contacts : [],
+    loading: loadedUid !== uid || loading,
+    error: loadedUid === uid ? error : null,
+    retry: () => setRevision((current) => current + 1),
+  };
 }
 
 /** Looks a user up by email and adds them to the caller's contacts. */
@@ -108,13 +119,32 @@ export async function addContactByEmail(email: string): Promise<AddContactResult
 }
 
 export async function setContactFavorite(contactUid: string, isFavorite: boolean) {
-  if (!supabase) return;
+  if (!supabase) throw new Error('Connect a Supabase project to update contacts.');
   const uid = useAuthStore.getState().uid;
-  if (!uid) return;
-  const { error } = await supabase
+  if (!uid) throw new Error('Sign in to update contacts.');
+  const { data, error } = await supabase
     .from('contacts')
     .update({ is_favorite: isFavorite })
     .eq('owner_id', uid)
-    .eq('contact_id', contactUid);
+    .eq('contact_id', contactUid)
+    .select('contact_id')
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!data) throw new Error('This contact is no longer in your list.');
+}
+
+/** Removes only the caller's contact entry; it does not delete chat history. */
+export async function removeContact(contactUid: string) {
+  if (!supabase) throw new Error('Connect a Supabase project to remove contacts.');
+  const uid = useAuthStore.getState().uid;
+  if (!uid) throw new Error('Sign in to remove contacts.');
+  const { data, error } = await supabase
+    .from('contacts')
+    .delete()
+    .eq('owner_id', uid)
+    .eq('contact_id', contactUid)
+    .select('contact_id')
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('This contact is no longer in your list.');
 }

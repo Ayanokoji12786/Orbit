@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, TextInput, View } from 'react-native';
+import { ActivityIndicator, ScrollView, TextInput, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppText, Avatar, EmptyState, IconButton, PressableScale, SectionHeader } from '@/components/ui';
+import { AppText, Avatar, Button, EmptyState, IconButton, PressableScale, SectionHeader } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { useRecentDms } from '@/features/chat/api';
 import { addContactByEmail, useContacts } from '@/features/contacts/api';
@@ -16,7 +16,7 @@ export default function Contacts() {
   const { colors, spacing, radii } = useAppTheme();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
-  const { contacts, loading } = useContacts();
+  const { contacts, loading, error: contactsError, retry } = useContacts();
   const recentDms = useRecentDms();
   const myUid = useAuthStore((s) => s.uid);
 
@@ -40,6 +40,7 @@ export default function Contacts() {
   const favorites = filtered.filter((c) => c.isFavorite);
 
   const submitAddContact = async () => {
+    if (addStatus?.kind === 'sending' || !addEmail.trim()) return;
     setAddStatus({ kind: 'sending' });
     try {
       const result = await addContactByEmail(addEmail);
@@ -103,7 +104,7 @@ export default function Contacts() {
               style={{ flex: 1, color: colors.textPrimary, fontSize: 16 }}
               onSubmitEditing={submitAddContact}
             />
-            <PressableScale onPress={submitAddContact} haptic="soft" disabled={!addEmail.trim()}>
+            <PressableScale onPress={submitAddContact} haptic="soft" disabled={!addEmail.trim() || addStatus?.kind === 'sending'}>
               <AppText variant="captionMedium" color="primary">
                 Add
               </AppText>
@@ -139,6 +140,13 @@ export default function Contacts() {
           style={{ flex: 1, color: colors.textPrimary, fontSize: 16 }}
         />
       </View>
+
+      {contactsError && (
+        <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+          <AppText variant="caption" color="error">Could not load contacts: {contactsError}</AppText>
+          <Button label="Try again" variant="secondary" size="md" onPress={retry} />
+        </View>
+      )}
 
       {recentConversations.length > 0 && (
         <View style={{ marginTop: spacing.xl }}>
@@ -179,7 +187,7 @@ export default function Contacts() {
           <SectionHeader title="Favorites" />
           <View style={{ gap: spacing.sm }}>
             {favorites.map((contact) => (
-              <ContactRow key={contact.id} name={contact.name} status={contact.status} onPress={() => router.push(`/contacts/${contact.id}`)} />
+              <ContactRow key={contact.id} name={contact.name} avatarUrl={contact.avatarUrl} status={contact.status} onPress={() => router.push(`/contacts/${contact.id}`)} />
             ))}
           </View>
         </View>
@@ -187,16 +195,18 @@ export default function Contacts() {
 
       <View style={{ marginTop: spacing.xl }}>
         <SectionHeader title="All contacts" />
-        {!loading && filtered.length === 0 ? (
+        {loading && filtered.length === 0 ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: spacing.lg }} />
+        ) : !contactsError && filtered.length === 0 ? (
           <EmptyState
             icon="people-outline"
-            title="No contacts yet"
-            subtitle="Add someone by their email to start meeting and chatting."
+            title={query ? 'No matching contacts' : 'No contacts yet'}
+            subtitle={query ? 'Try another name.' : 'Add someone by their email to start meeting and chatting.'}
           />
         ) : (
           <View style={{ gap: spacing.sm }}>
             {filtered.map((contact) => (
-              <ContactRow key={contact.id} name={contact.name} status={contact.status} onPress={() => router.push(`/contacts/${contact.id}`)} />
+              <ContactRow key={contact.id} name={contact.name} avatarUrl={contact.avatarUrl} status={contact.status} onPress={() => router.push(`/contacts/${contact.id}`)} />
             ))}
           </View>
         )}
@@ -207,10 +217,12 @@ export default function Contacts() {
 
 function ContactRow({
   name,
+  avatarUrl,
   status,
   onPress,
 }: {
   name: string;
+  avatarUrl?: string | null;
   status: 'online' | 'away' | 'offline';
   onPress: () => void;
 }) {
@@ -228,7 +240,7 @@ function ContactRow({
         borderRadius: radii.md,
         backgroundColor: colors.surfaceElevated,
       }}>
-      <Avatar name={name} size={40} status={status} />
+      <Avatar name={name} uri={avatarUrl} size={40} status={status} />
       <View style={{ flex: 1 }}>
         <AppText variant="bodyMedium">{name}</AppText>
         <AppText variant="caption" color="textSecondary" style={{ textTransform: 'capitalize' }}>

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, type Href } from 'expo-router';
@@ -7,6 +8,7 @@ import { AppText, Avatar, Button, PressableScale } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { signOut } from '@/features/auth/api';
+import { useProfile } from '@/features/profile/api';
 import { useAuthStore } from '@/stores/auth-store';
 
 const rows: { icon: keyof typeof Ionicons.glyphMap; label: string; href: Href }[] = [
@@ -21,6 +23,23 @@ export default function Settings() {
   const { spacing, radii, colors } = useAppTheme();
   const insets = useSafeAreaInsets();
   const email = useAuthStore((s) => s.email);
+  const { profile, error: profileError } = useProfile();
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const displayName = profile?.displayName ?? email ?? 'Orbit User';
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError(null);
+    try {
+      await signOut();
+      router.replace('/(auth)/sign-in');
+    } catch (error) {
+      setSignOutError(error instanceof Error ? error.message : 'Could not sign out.');
+      setSigningOut(false);
+    }
+  };
 
   return (
     <ScrollView
@@ -32,7 +51,11 @@ export default function Settings() {
       showsVerticalScrollIndicator={false}>
       <AppText variant="displayMedium">Settings</AppText>
 
-      <PressableScale onPress={() => router.push('/profile')} haptic="soft" style={{ marginTop: spacing.lg }}>
+      <PressableScale
+        onPress={() => router.push('/profile')}
+        haptic="soft"
+        accessibilityLabel="View profile"
+        style={{ marginTop: spacing.lg }}>
         <View
           style={{
             flexDirection: 'row',
@@ -42,16 +65,22 @@ export default function Settings() {
             borderRadius: radii.md,
             backgroundColor: colors.surfaceElevated,
           }}>
-          <Avatar name={email ?? 'Orbit User'} size={48} />
+          <Avatar name={displayName} uri={profile?.avatarUrl} size={48} />
           <View style={{ flex: 1 }}>
-            <AppText variant="bodyMedium">{email ?? 'Orbit User'}</AppText>
+            <AppText variant="bodyMedium">{displayName}</AppText>
             <AppText variant="caption" color="textSecondary">
-              View profile
+              {email ?? 'View profile'}
             </AppText>
           </View>
           <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
         </View>
       </PressableScale>
+
+      {profileError && isSupabaseConfigured && (
+        <AppText variant="caption" color="error" style={{ marginTop: spacing.sm }}>
+          Could not refresh profile: {profileError}
+        </AppText>
+      )}
 
       <View style={{ marginTop: spacing.xl, gap: spacing.sm }}>
         {rows.map((row) => (
@@ -82,14 +111,17 @@ export default function Settings() {
       )}
 
       <View style={{ marginTop: spacing.xl }}>
+        {signOutError && (
+          <AppText variant="caption" color="error" style={{ marginBottom: spacing.sm }}>
+            {signOutError}
+          </AppText>
+        )}
         <Button
           label="Sign Out"
           variant="destructive"
           disabled={!isSupabaseConfigured}
-          onPress={async () => {
-            await signOut();
-            router.replace('/(auth)/sign-in');
-          }}
+          loading={signingOut}
+          onPress={handleSignOut}
         />
       </View>
     </ScrollView>

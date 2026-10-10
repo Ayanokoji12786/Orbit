@@ -17,6 +17,8 @@ export type Meeting = {
   durationMinutes: number;
   participants: MeetingParticipant[];
   hasPassword: boolean;
+  cancelledAt: string | null;
+  endedAt: string | null;
 };
 
 export type ChatMessage = {
