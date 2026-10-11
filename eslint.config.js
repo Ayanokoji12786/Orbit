@@ -16,6 +16,14 @@ module.exports = defineConfig([
     },
   },
   {
+    // Supabase Edge Functions resolve npm: specifiers through Deno, not Node.
+    // Keep checking other imports; validate these functions with deno check.
+    files: ['supabase/functions/**/*.ts'],
+    rules: {
+      'import/no-unresolved': ['error', { ignore: ['^npm:'] }],
+    },
+  },
+  {
     // These hooks clear their own state when the id/user they're keyed on changes, so the
     // "stale data from the previous id" flash can't happen. That's a deliberate one-render
     // reset on a path that only runs when the key changes — not a cascading-render bug.

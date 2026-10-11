@@ -83,6 +83,18 @@ supabase functions deploy livekit-token
 supabase functions deploy set-meeting-password
 ```
 
+### 5. In-meeting AI assistant (optional)
+
+The existing assistant uses Groq through the authenticated `groq-chat` Edge Function.
+Set `GROQ_API_KEY` securely in the Supabase project's Edge Function secrets, then deploy:
+
+```bash
+supabase functions deploy groq-chat
+```
+
+The function uses `openai/gpt-oss-120b` and applies a per-user rate limit. Keep the API
+key on the server; never add it to an `EXPO_PUBLIC_` variable.
+
 ### Local development (optional, no live project needed)
 
 ```bash
@@ -114,7 +126,7 @@ supabase/
 
 ## Roadmap
 
-- **Phase 4** — AI summaries, live captions/translation, AI assistant, transcript search. Needs a
-  Claude API key behind a server (never in the client) — paused pending that decision.
+- **Phase 4** — The in-meeting AI assistant is implemented through Groq. AI summaries,
+  live captions/translation, and transcript search still need their backend pipelines.
 - **Phase 5** — Performance, security hardening, accessibility pass, testing, store submission,
   screen sharing (ReplayKit/MediaProjection).
