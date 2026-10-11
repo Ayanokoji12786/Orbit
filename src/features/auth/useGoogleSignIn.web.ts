@@ -2,11 +2,14 @@ import { useCallback, useState } from 'react';
 
 import { supabase } from '@/lib/supabase';
 
+// Match native configuration so the button stays disabled until Google is set up.
+const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+
 /** Browser OAuth redirects through Supabase; native Google SDKs cannot run here. */
 export function useGoogleSignIn(onError: (error: Error) => void) {
   const [loading, setLoading] = useState(false);
   const promptAsync = useCallback(async () => {
-    if (!supabase || loading) return;
+    if (!supabase || !webClientId || loading) return;
     setLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -21,5 +24,5 @@ export function useGoogleSignIn(onError: (error: Error) => void) {
     }
   }, [loading, onError]);
 
-  return { isAvailable: Boolean(supabase), loading, promptAsync };
+  return { isAvailable: Boolean(supabase && webClientId), loading, promptAsync };
 }

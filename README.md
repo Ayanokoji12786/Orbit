@@ -26,6 +26,8 @@ Before deploying, add `EXPO_PUBLIC_SUPABASE_URL` and
 `EXPO_PUBLIC_SUPABASE_ANON_KEY` in Vercel's project environment settings. These are
 public client configuration; never use a Supabase service-role key. Redeploy after
 changing these values because Expo embeds them during the build.
+Local builds after changing `.env.local` should also use `npx expo export --platform
+web --clear` to prevent Metro from reusing a bundle with old client configuration.
 
 Complete the Supabase migrations and LiveKit Edge Function setup below. Vercel hosts
 the browser interface; LiveKit carries meeting media and Supabase handles accounts,
@@ -35,7 +37,8 @@ participants enable them explicitly and may need to click **Enable meeting audio
 
 In Supabase Authentication > URL Configuration, set the deployed HTTPS URL as the
 Site URL and add its origin to the allowed redirect URLs. Enable the Google provider
-for browser Google sign-in; its OAuth credentials stay in Supabase. Configure Google's
+for browser Google sign-in and set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` in Vercel to
+enable its button; the OAuth secret stays in Supabase. Configure Google's
 authorized redirect URI using Supabase's callback URL. Email-code sign-in also works
 with the email template setup below. Do not broadly allow every Vercel preview origin.
 
