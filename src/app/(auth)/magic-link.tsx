@@ -22,7 +22,7 @@ export default function MagicLinkWait() {
     setVerifying(true);
     try {
       await verifySignInCode(email, code.trim());
-      // Auth state listener picks up the new session; the root gate redirects automatically.
+      router.replace('/');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That code is invalid or has expired.');
     } finally {
@@ -37,6 +37,7 @@ export default function MagicLinkWait() {
   }, [cooldown]);
 
   const resend = async () => {
+    setError(null);
     setCooldown(30);
     setResending(true);
     try {
@@ -57,8 +58,11 @@ export default function MagicLinkWait() {
           Check your email
         </AppText>
         <AppText variant="body" color="textSecondary" style={{ marginTop: spacing.xs }}>
-          We sent a 6-digit code to{'\n'}
+          Check for a sign-in code sent to{'\n'}
           <AppText variant="bodyMedium">{email}</AppText>.
+        </AppText>
+        <AppText variant="caption" color="textSecondary" style={{ marginTop: spacing.sm }}>
+          Check spam or junk if it hasn’t arrived.
         </AppText>
 
         <View style={{ marginTop: spacing.xxl }}>
@@ -67,14 +71,14 @@ export default function MagicLinkWait() {
           </AppText>
           <TextInput
             value={code}
-            onChangeText={(text) => setCode(text.replace(/[^0-9]/g, '').slice(0, 6))}
+            onChangeText={(text) => setCode(text.replace(/[^0-9]/g, '').slice(0, 10))}
             placeholder="123456"
             placeholderTextColor={colors.textTertiary}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="number-pad"
             textContentType="oneTimeCode"
-            maxLength={6}
+            maxLength={10}
             style={{
               height: 52,
               borderRadius: radii.md,
@@ -97,7 +101,7 @@ export default function MagicLinkWait() {
         )}
 
         <View style={{ marginTop: spacing.lg }}>
-          <Button label="Continue" onPress={verify} loading={verifying} disabled={code.length !== 6} />
+          <Button label="Continue" onPress={verify} loading={verifying} disabled={!/^\d{6,10}$/.test(code)} />
         </View>
 
         <View style={{ alignItems: 'center', marginTop: spacing.lg }}>

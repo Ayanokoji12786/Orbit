@@ -14,14 +14,14 @@ function requireAuth() {
   return supabase;
 }
 
-/** Emails a 6-digit sign-in code. */
+/** Requests a sign-in email; its template must include Supabase's {{ .Token }}. */
 export async function sendSignInCode(email: string) {
   const client = requireAuth();
   const { error } = await client.auth.signInWithOtp({ email });
   if (error) throw error;
 }
 
-/** Verifies the 6-digit code from the sign-in email and completes sign-in. */
+/** Verifies the code using the project's configured OTP length. */
 export async function verifySignInCode(email: string, code: string) {
   const client = requireAuth();
   const { error } = await client.auth.verifyOtp({ email, token: code, type: 'email' });

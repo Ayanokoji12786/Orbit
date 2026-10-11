@@ -50,8 +50,9 @@ participants enable them explicitly and may need to click **Enable meeting audio
 
 In Supabase Authentication > URL Configuration, set the deployed HTTPS URL as the
 Site URL and add its origin to the allowed redirect URLs. Enable the Google provider
-for browser Google sign-in and set `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` in Vercel to
-enable its button; the OAuth secret stays in Supabase. Configure Google's
+for browser Google sign-in; the browser reads Supabase's public provider settings
+to enable its button. A client ID in the browser bundle is not required; the OAuth
+credentials stay in Supabase. Configure Google's
 authorized redirect URI using Supabase's callback URL. Email-code sign-in also works
 with the email template setup below. Do not broadly allow every Vercel preview origin.
 
@@ -91,15 +92,24 @@ brew install watchman cocoapods
 2. Project Settings > API: note the **Project URL** and **anon public key** — those are your
    `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
 3. Authentication > Providers:
-   - **Email**: enabled by default. This app signs in with a 6-digit code rather than a link, so
+   - **Email**: enabled by default. This app accepts 6–10 digit codes rather than a link, so
      edit Authentication > Email Templates > **Magic Link** and add `{{ .Token }}` somewhere in the
      body — the code is generated either way, but the default template only surfaces the link.
    - **Google**: enable, then paste in a Client ID + Secret from a "Web application" OAuth client
      in [Google Cloud Console](https://console.cloud.google.com/apis/credentials). Put that same
-     Client ID in `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`.
+     Client ID in `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` for native builds. Browser sign-in uses
+     the provider configured in Supabase. Add the Supabase callback URL shown in the provider
+     settings to Google's authorized redirect URIs, and allow the deployed app origin in
+     Supabase Authentication > URL Configuration.
    - **Apple**: enable, then fill in the Services ID, Team ID, Key ID, and private key from your
      Apple Developer account.
 4. `cp .env.example .env` and fill in the values above.
+
+For OTP delivery to public users, configure Authentication > Email > SMTP with your email
+provider. Supabase's default email service restricts delivery to project-team addresses and
+has low rate limits; enabling the Email provider alone does not establish delivery readiness.
+Check Authentication logs for failed sends before retrying. See the
+[official SMTP guide](https://supabase.com/docs/guides/auth/auth-smtp).
 
 ### 2. Database schema, RLS policies, and storage
 
