@@ -16,6 +16,36 @@ side and "Supabase & LiveKit setup" below for everything else.
 
 ## Running it
 
+### Browser app on Vercel
+
+Import this repository in [Vercel](https://vercel.com/new). The included `vercel.json`
+installs with the lockfile, exports Expo's browser app, and routes direct meeting links
+back to the app. Use Node.js 24 for the build.
+
+Before deploying, add `EXPO_PUBLIC_SUPABASE_URL` and
+`EXPO_PUBLIC_SUPABASE_ANON_KEY` in Vercel's project environment settings. These are
+public client configuration; never use a Supabase service-role key. Redeploy after
+changing these values because Expo embeds them during the build.
+
+Complete the Supabase migrations and LiveKit Edge Function setup below. Vercel hosts
+the browser interface; LiveKit carries meeting media and Supabase handles accounts,
+meeting access, chat, and polls. The browser room uses real LiveKit audio/video,
+participant tiles, and browser screen sharing. Camera and microphone start off;
+participants enable them explicitly and may need to click **Enable meeting audio**.
+
+In Supabase Authentication > URL Configuration, set the deployed HTTPS URL as the
+Site URL and add its origin to the allowed redirect URLs. Enable the Google provider
+for browser Google sign-in; its OAuth credentials stay in Supabase. Configure Google's
+authorized redirect URI using Supabase's callback URL. Email-code sign-in also works
+with the email template setup below. Do not broadly allow every Vercel preview origin.
+
+After deployment, test direct links and refreshing `/meeting/<room-code>`, sign in with
+two separate browser profiles, and join the same meeting. Verify mutual audio/video,
+screen sharing, and leaving the call. A successful static build alone does not verify
+the connected backend.
+
+### Native app
+
 This app uses native modules (Google/Apple Sign-In, LiveKit, ReplayKit/MediaProjection), so **it
 cannot run in Expo Go**. Use a development build:
 

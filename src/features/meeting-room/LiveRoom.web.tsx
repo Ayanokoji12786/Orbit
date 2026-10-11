@@ -1,12 +1,12 @@
-// @livekit/react-native has no web implementation. This preview keeps the
-// room's visual design and panels testable in a browser without a real
-// video connection — real calling only ever runs on iOS/Android.
+// Use LiveKit's browser SDK; the native SDK cannot run in a web bundle.
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
+import { isTrackReference, LiveKitRoom, RoomAudioRenderer, StartAudio, useConnectionState, useLocalParticipant, useRemoteParticipants, useTracks, VideoTrack } from '@livekit/components-react';
+import { ConnectionState, Track } from 'livekit-client';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppText, Avatar, IconButton } from '@/components/ui';
+import { AppText, Avatar, Button, IconButton } from '@/components/ui';
 import { useAppTheme } from '@/design-system/useAppTheme';
 import { fetchLiveKitToken, type LiveKitJoinInfo } from '@/lib/livekit';
 
@@ -27,33 +27,60 @@ type Props = {
 };
 
 export function LiveRoom({ roomCode, password }: Props) {
-  const { spacing, radii } = useAppTheme();
-  const insets = useSafeAreaInsets();
-  const [muted, setMuted] = useState(false);
-  const [cameraOff, setCameraOff] = useState(true);
-  const [screenSharing, setScreenSharing] = useState(false);
-  const [panel, setPanel] = useState<Panel>(null);
-  const [reactions, setReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
   const [joinInfo, setJoinInfo] = useState<LiveKitJoinInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // The panels key off the meeting's UUID, not the room code — passing the code made
-  // every chat/poll query fail as an invalid uuid, silently, so web showed empty panels
-  // and dropped every message. The token endpoint is a plain edge function, so it works
-  // here even though the LiveKit SDK itself has no web build.
   useEffect(() => {
     let cancelled = false;
     setJoinInfo(null);
+    setError(null);
     fetchLiveKitToken(roomCode, password)
-      .then((info) => {
-        if (!cancelled) setJoinInfo(info);
-      })
-      .catch(() => {
-        // Preview-only: panels stay disabled below rather than showing an error screen.
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then((info) => { if (!cancelled) setJoinInfo(info); })
+      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Could not join this meeting.'); });
+    return () => { cancelled = true; };
   }, [roomCode, password]);
+
+  if (error || !joinInfo) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 }}>
+        {!error && <ActivityIndicator color="#5B5FFF" size="large" />}
+        <AppText color="textInverse">{error ?? 'Connecting…'}</AppText>
+        <Button label="Go back" onPress={() => router.canGoBack() ? router.back() : router.replace('/')} />
+      </View>
+    );
+  }
+
+  return (
+    <LiveKitRoom
+      key={joinInfo.roomName}
+      serverUrl={joinInfo.url}
+      token={joinInfo.token}
+      connect
+      audio={false}
+      video={false}
+      style={{ display: 'flex', flex: 1, minHeight: 0 }}
+      onError={(err) => setError(err.message)}
+      onDisconnected={() => router.canGoBack() ? router.back() : router.replace('/')}>
+      <RoomContent roomCode={roomCode} joinInfo={joinInfo} />
+    </LiveKitRoom>
+  );
+}
+
+function RoomContent({ roomCode, joinInfo }: { roomCode: string; joinInfo: LiveKitJoinInfo }) {
+  const { spacing, radii } = useAppTheme();
+  const insets = useSafeAreaInsets();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
+  const remoteParticipants = useRemoteParticipants();
+  const connection = useConnectionState();
+  const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }, { source: Track.Source.ScreenShare, withPlaceholder: false }]);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [panel, setPanel] = useState<Panel>(null);
+  const [reactions, setReactions] = useState<{ id: string; emoji: string; x: number }[]>([]);
+  const changeMedia = async (action: () => Promise<unknown>) => {
+    setMediaError(null);
+    try { await action(); }
+    catch (err) { setMediaError(err instanceof Error ? err.message : 'Could not access this device.'); }
+  };
 
   const spawnReaction = (emoji: string) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -61,10 +88,14 @@ export function LiveRoom({ roomCode, password }: Props) {
     setReactions((current) => [...current, { id, emoji, x }]);
   };
 
-  const tiles = [{ id: 'self', name: 'You' }];
+  const participants = [
+    { id: localParticipant.identity, name: `${localParticipant.name || 'You'} (you)`, muted: !isMicrophoneEnabled },
+    ...remoteParticipants.map((p) => ({ id: p.identity, name: p.name || p.identity, muted: !p.isMicrophoneEnabled })),
+  ];
 
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <RoomAudioRenderer />
       <View
         style={{
           position: 'absolute',
@@ -104,21 +135,26 @@ export function LiveRoom({ roomCode, password }: Props) {
           paddingBottom: 160,
           gap: spacing.sm,
         }}>
-        {tiles.map((tile) => (
+        {tracks.map((track) => (
           <View
-            key={tile.id}
+            key={`${track.participant.identity}-${track.source}`}
             style={{
-              width: '48%',
-              aspectRatio: 3 / 4,
+              flexBasis: tracks.length === 1 ? '100%' : '46%',
+              flexGrow: 1,
+              minWidth: 160,
+              maxHeight: '100%',
+              aspectRatio: 16 / 9,
               borderRadius: radii.lg,
               backgroundColor: '#161618',
               alignItems: 'center',
               justifyContent: 'center',
               overflow: 'hidden',
             }}>
-            <Avatar name={tile.name} size={64} />
-            <AppText variant="caption" color="textInverse" style={{ marginTop: spacing.sm }}>
-              {tile.name}
+            {isTrackReference(track) && !track.publication.isMuted ? (
+              <VideoTrack trackRef={track} style={{ width: '100%', height: '100%', objectFit: track.source === Track.Source.ScreenShare ? 'contain' : 'cover' }} />
+            ) : <Avatar name={track.participant.name || track.participant.identity || 'You'} size={64} />}
+            <AppText variant="caption" color="textInverse" style={{ position: 'absolute', bottom: 8, left: 8, backgroundColor: 'rgba(0,0,0,0.6)', padding: 4 }}>
+              {track.participant.name || track.participant.identity || 'You'}{track.participant.isLocal ? ' (you)' : ''}
             </AppText>
           </View>
         ))}
@@ -130,19 +166,20 @@ export function LiveRoom({ roomCode, password }: Props) {
 
       <View style={{ position: 'absolute', bottom: 40, left: spacing.lg, right: spacing.lg }}>
         <ControlBar
-          muted={muted}
-          onToggleMute={() => setMuted((m) => !m)}
-          cameraOff={cameraOff}
-          onToggleCamera={() => setCameraOff((c) => !c)}
+          muted={!isMicrophoneEnabled}
+          onToggleMute={() => void changeMedia(() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled))}
+          cameraOff={!isCameraEnabled}
+          onToggleCamera={() => void changeMedia(() => localParticipant.setCameraEnabled(!isCameraEnabled))}
           onReact={spawnReaction}
           onMore={() => setPanel('more')}
-          onLeave={() => router.back()}
+          onLeave={() => router.canGoBack() ? router.back() : router.replace('/')}
         />
       </View>
 
-      <View style={{ position: 'absolute', bottom: 40 + 76, left: spacing.lg, right: spacing.lg, alignItems: 'center' }} pointerEvents="none">
-        <AppText variant="micro" color="textTertiary">
-          Web preview only — real video calling runs on iOS/Android.
+      <View style={{ position: 'absolute', bottom: 40 + 76, left: spacing.lg, right: spacing.lg, alignItems: 'center' }}>
+        <StartAudio label="Enable meeting audio" />
+        <AppText variant="caption" color={mediaError ? 'error' : 'textInverse'}>
+          {mediaError ?? (connection === ConnectionState.Connected ? 'Connected' : connection)}
         </AppText>
       </View>
 
@@ -155,11 +192,11 @@ export function LiveRoom({ roomCode, password }: Props) {
           { icon: 'stats-chart-outline', label: 'Polls', onPress: () => setPanel('polls') },
           { icon: 'sparkles-outline', label: 'AI Assistant', onPress: () => setPanel('ai') },
           {
-            icon: screenSharing ? 'stop-circle-outline' : 'desktop-outline',
-            label: screenSharing ? 'Stop sharing' : 'Share screen',
+            icon: isScreenShareEnabled ? 'stop-circle-outline' : 'desktop-outline',
+            label: isScreenShareEnabled ? 'Stop sharing' : 'Share screen',
             onPress: () => {
               setPanel(null);
-              setScreenSharing((s) => !s);
+              void changeMedia(() => localParticipant.setScreenShareEnabled(!isScreenShareEnabled));
             },
           },
           { icon: 'hand-left-outline', label: 'Raise hand', onPress: () => setPanel(null) },
@@ -172,7 +209,7 @@ export function LiveRoom({ roomCode, password }: Props) {
         onClose={() => setPanel(null)}
         meetingTitle={joinInfo?.meetingTitle ?? roomCode}
       />
-      <ParticipantsSheet visible={panel === 'participants'} onClose={() => setPanel(null)} participants={tiles} />
+      <ParticipantsSheet visible={panel === 'participants'} onClose={() => setPanel(null)} participants={participants} />
       <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} />
     </View>
   );
