@@ -15,8 +15,9 @@ function json(body: unknown, status = 200) {
 }
 
 type InMessage = { role: 'user' | 'assistant'; content: string };
-const MAX_MESSAGES = 30;
-const MAX_CONTENT_LENGTH = 4000;
+const MAX_MESSAGES = 20;
+const MAX_CONTENT_LENGTH = 2000;
+const MAX_TOTAL_CONTENT_LENGTH = 24000;
 
 /**
  * Proxies one chat turn to Groq's OpenAI-compatible API. Stateless — the
@@ -34,6 +35,13 @@ Deno.serve(async (req) => {
     const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } } });
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData.user) return json({ error: 'Sign in required.' }, 401);
+
+    const { data: accountActive, error: accountError } = await userClient.rpc('account_is_active');
+    if (accountError) {
+      console.error('account_is_active failed', accountError);
+      return json({ error: 'The AI assistant is unavailable right now.' }, 503);
+    }
+    if (!accountActive) return json({ error: 'This account is no longer active.' }, 403);
 
     // Destructure the error: without it any RPC failure yields data === null, which
     // reads as "not allowed" and 429s every request with a misleading message.
@@ -54,29 +62,46 @@ Deno.serve(async (req) => {
     if (!requestBody || typeof requestBody !== 'object' || Array.isArray(requestBody)) {
       return json({ error: 'Invalid request body.' }, 400);
     }
-    const { messages, meetingTitle } = requestBody as { messages?: InMessage[]; meetingTitle?: unknown };
-    if (meetingTitle !== undefined && (typeof meetingTitle !== 'string' || meetingTitle.length > 120)) {
-      return json({ error: 'Invalid meeting title.' }, 400);
+    const { messages, meetingId } = requestBody as { messages?: InMessage[]; meetingId?: unknown };
+    if (typeof meetingId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(meetingId)) {
+      return json({ error: 'Invalid meeting.' }, 400);
     }
 
     if (!Array.isArray(messages) || messages.length === 0) return json({ error: 'messages is required.' }, 400);
     if (messages.length > MAX_MESSAGES) return json({ error: 'Conversation is too long.' }, 400);
+    let totalContentLength = 0;
     for (const m of messages) {
       if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string' || !m.content.trim()) {
         return json({ error: 'Malformed message.' }, 400);
       }
       if (m.content.length > MAX_CONTENT_LENGTH) return json({ error: 'Message is too long.' }, 400);
+      totalContentLength += m.content.length;
     }
+    if (totalContentLength > MAX_TOTAL_CONTENT_LENGTH) return json({ error: 'Conversation is too long.' }, 400);
+
+    const { data: isMember, error: membershipError } = await userClient.rpc('is_active_meeting_member', {
+      p_meeting_id: meetingId,
+    });
+    if (membershipError) {
+      console.error('is_active_meeting_member failed', membershipError);
+      return json({ error: 'The AI assistant is unavailable right now.' }, 503);
+    }
+    if (!isMember) return json({ error: 'This meeting is no longer available to you.' }, 403);
 
     const systemMessage = {
       role: 'system' as const,
-      content: `You are Orbit's in-meeting AI assistant. Be concise and helpful. You cannot hear the meeting or read its chat, transcript, or files. Never claim to know what participants said or decided unless the user includes it in a message.${meetingTitle ? ` The meeting is titled "${meetingTitle}".` : ''} Today's date is ${new Date().toISOString().slice(0, 10)}.`,
+      content: `You are Orbit's in-meeting AI assistant. Be concise and helpful. You cannot hear the meeting or read its chat, transcript, or files. Never claim to know what participants said or decided unless the user includes it in a message. Today's date is ${new Date().toISOString().slice(0, 10)}.`,
     };
 
     const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: GROQ_MODEL, messages: [systemMessage, ...messages], stream: false }),
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [systemMessage, ...messages],
+        max_completion_tokens: 800,
+        stream: false,
+      }),
     });
 
     if (!groqRes.ok) {

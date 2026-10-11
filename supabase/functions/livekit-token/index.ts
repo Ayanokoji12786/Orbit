@@ -36,6 +36,10 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await userClient.auth.getUser();
     if (userErr || !userData.user) return json({ error: 'Sign in required.' }, 401);
 
+    const { data: accountActive, error: accountError } = await userClient.rpc('account_is_active');
+    if (accountError) return json({ error: 'Meeting join is temporarily unavailable.' }, 503);
+    if (!accountActive) return json({ error: 'This account is being deleted.' }, 410);
+
     const uid = userData.user.id;
     const { data: profile } = await userClient.from('users')
       .select('display_name').eq('id', uid).maybeSingle();
@@ -83,6 +87,11 @@ Deno.serve(async (req) => {
     if (!meeting) return json({ error: 'Meeting not found.' }, 404);
     if (meeting.cancelled_at) return json({ error: 'This meeting was cancelled.' }, 410);
     if (meeting.ended_at) return json({ error: 'This meeting has ended.' }, 410);
+    const { data: hostDeletion, error: hostDeletionError } = await admin
+      .from('account_deletion_requests').select('user_id')
+      .eq('user_id', meeting.host_id).maybeSingle();
+    if (hostDeletionError) return json({ error: 'Meeting join is temporarily unavailable.' }, 503);
+    if (hostDeletion) return json({ error: 'This meeting is closing.' }, 410);
 
     if (meeting.has_password) {
       const { data: secret } = await admin
@@ -107,6 +116,20 @@ Deno.serve(async (req) => {
       console.error('join_meeting_for_token failed', participantErr);
       if (participantErr.code === '42501') return json({ error: 'This meeting is no longer open.' }, 410);
       return json({ error: 'Could not join this meeting. Try again.' }, 500);
+    }
+
+    // The deletion request can be created while password verification and
+    // participant admission run. Check once more immediately before minting.
+    const [finalAccount, finalHost] = await Promise.all([
+      userClient.rpc('account_is_active'),
+      admin.from('account_deletion_requests').select('user_id')
+        .eq('user_id', meeting.host_id).maybeSingle(),
+    ]);
+    if (finalAccount.error || finalHost.error) {
+      return json({ error: 'Meeting join is temporarily unavailable.' }, 503);
+    }
+    if (!finalAccount.data || finalHost.data) {
+      return json({ error: 'This meeting is closing.' }, 410);
     }
 
     const accessToken = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {

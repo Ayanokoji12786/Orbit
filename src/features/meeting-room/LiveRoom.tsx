@@ -380,7 +380,7 @@ function RoomContent({ meetingId, meetingTitle, isHost }: { meetingId: string; m
       />
       <ChatPanel visible={panel === 'chat'} onClose={() => setPanel(null)} meetingId={meetingId} />
       <PollsPanel visible={panel === 'polls'} onClose={() => setPanel(null)} meetingId={meetingId} />
-      <AiAssistantPanel visible={panel === 'ai'} onClose={() => setPanel(null)} meetingTitle={meetingTitle} />
+      <AiAssistantPanel visible={panel === 'ai'} onClose={() => setPanel(null)} meetingId={meetingId} />
       <ParticipantsSheet visible={panel === 'participants'} onClose={() => setPanel(null)} participants={participants} />
       <WhiteboardOverlay visible={panel === 'whiteboard'} onClose={() => setPanel(null)} meetingId={meetingId} canClear={isHost} />
     </View>

@@ -6,9 +6,11 @@ import { supabase } from '@/lib/supabase';
 export type AiMessage = { id: string; role: 'user' | 'assistant'; content: string; createdAt: string };
 
 const HISTORY_SENT_TO_MODEL = 20;
+const MAX_MESSAGE_LENGTH = 2000;
+const MAX_HISTORY_LENGTH = 24000;
 const newId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-export function useAiAssistant(meetingTitle: string) {
+export function useAiAssistant(meetingId: string) {
   const [messages, setMessages] = useState<AiMessage[]>([]);
   const [isThinking, setIsThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,9 +30,20 @@ export function useAiAssistant(meetingTitle: string) {
     setIsThinking(true);
 
     try {
-      const payload = nextMessages.slice(-HISTORY_SENT_TO_MODEL).map(({ role, content }) => ({ role, content }));
+      const recent = nextMessages.slice(-HISTORY_SENT_TO_MODEL);
+      const payload: { role: AiMessage['role']; content: string }[] = [];
+      let length = 0;
+      for (let index = recent.length - 1; index >= 0; index--) {
+        const { role, content } = recent[index];
+        // Model replies can exceed the per-message request cap. Keep the full
+        // reply in the UI while bounding what is sent as context next turn.
+        const boundedContent = content.slice(0, MAX_MESSAGE_LENGTH);
+        if (length + boundedContent.length > MAX_HISTORY_LENGTH) break;
+        payload.unshift({ role, content: boundedContent });
+        length += boundedContent.length;
+      }
       const { data, error: fnError } = await supabase.functions.invoke<{ reply: string }>('groq-chat', {
-        body: { messages: payload, meetingTitle },
+        body: { messages: payload, meetingId },
       });
 
       if (fnError) {

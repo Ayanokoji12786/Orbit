@@ -6,10 +6,10 @@ import { AppText, BottomSheet, EmptyState, PressableScale } from '@/components/u
 
 import { type AiMessage, useAiAssistant } from './ai-assistant-api';
 
-type Props = { visible: boolean; onClose: () => void; meetingTitle: string };
+type Props = { visible: boolean; onClose: () => void; meetingId: string };
 
-export function AiAssistantPanel({ visible, onClose, meetingTitle }: Props) {
-  const { messages, isThinking, error, sendMessage } = useAiAssistant(meetingTitle);
+export function AiAssistantPanel({ visible, onClose, meetingId }: Props) {
+  const { messages, isThinking, error, sendMessage } = useAiAssistant(meetingId);
   const [text, setText] = useState('');
   const listRef = useRef<FlatList<AiMessage>>(null);
 
@@ -57,6 +57,7 @@ export function AiAssistantPanel({ visible, onClose, meetingTitle }: Props) {
             placeholder="Ask the AI assistant"
             placeholderTextColor="rgba(255,255,255,0.4)"
             multiline
+            maxLength={2000}
             editable={!isThinking}
             style={{
               flex: 1,

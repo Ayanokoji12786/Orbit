@@ -24,6 +24,11 @@ const supabaseSchema = `
   create role service_role nologin bypassrls;
   create schema auth;
   create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb);
+  create table auth.sessions (
+    id uuid primary key,
+    user_id uuid not null references auth.users(id) on delete cascade,
+    created_at timestamptz not null
+  );
   create function auth.uid() returns uuid language sql stable as $$
     select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
   $$;
@@ -35,7 +40,8 @@ const supabaseSchema = `
     file_size_limit bigint, allowed_mime_types text[]
   );
   create table storage.objects (
-    id uuid primary key default gen_random_uuid(), bucket_id text, name text
+    id uuid primary key default gen_random_uuid(), bucket_id text, name text,
+    owner_id text
   );
   create function storage.foldername(name text) returns text[] language sql immutable as $$
     select case when strpos(name, '/') = 0 then '{}'::text[]
@@ -338,6 +344,12 @@ test('Supabase migrations apply and enforce meeting authorization', async (t) =>
       assert.notEqual(rescheduled.rows[0].starts_at, originalStart);
       const pollId = '77777777-7777-4777-8777-777777777777';
       await seedMeetingContent(db, ids.meeting, pollId);
+      const activeMembership = await as(db, 'authenticated', ids.guest,
+        'select public.is_active_meeting_member($1::uuid) as allowed', [ids.meeting]);
+      assert.equal(activeMembership.rows[0].allowed, true);
+      const outsiderMembership = await as(db, 'authenticated', ids.outsider,
+        'select public.is_active_meeting_member($1::uuid) as allowed', [ids.meeting]);
+      assert.equal(outsiderMembership.rows[0].allowed, false);
       assert.deepEqual(await meetingContentCounts(db, ids.guest, ids.meeting), [1, 1, 1]);
       await rejectsSqlState(as(db, 'authenticated', ids.guest,
         `insert into storage.objects (bucket_id, name)
@@ -368,6 +380,9 @@ test('Supabase migrations apply and enforce meeting authorization', async (t) =>
       assert.deepEqual(await meetingContentCounts(db, ids.guest, ids.meeting), [1, 1, 1]);
       await as(db, 'authenticated', ids.guest,
         'select public.leave_meeting($1::uuid)', [ids.meeting]);
+      const afterLeaveMembership = await as(db, 'authenticated', ids.guest,
+        'select public.is_active_meeting_member($1::uuid) as allowed', [ids.meeting]);
+      assert.equal(afterLeaveMembership.rows[0].allowed, false);
       const afterLeave = await as(db, 'authenticated', ids.guest,
         'select seq from public.meeting_whiteboard_events where meeting_id = $1',
         [ids.meeting]);
@@ -390,6 +405,9 @@ test('Supabase migrations apply and enforce meeting authorization', async (t) =>
         'select public.end_meeting($1::uuid)', [ids.meeting]), '42501');
       await as(db, 'authenticated', ids.host,
         'select public.end_meeting($1::uuid)', [ids.meeting]);
+      const afterEndMembership = await as(db, 'authenticated', ids.host,
+        'select public.is_active_meeting_member($1::uuid) as allowed', [ids.meeting]);
+      assert.equal(afterEndMembership.rows[0].allowed, false);
       await assertTerminalSettingsImmutable(db, ids.meeting);
       await rejectsSqlState(as(db, 'authenticated', ids.host,
         'select public.set_meeting_password_hash($1::uuid, $2::text)',
@@ -426,6 +444,111 @@ test('Supabase migrations apply and enforce meeting authorization', async (t) =>
       await rejectsSqlState(as(db, 'service_role', ids.guest,
         'select public.join_meeting_for_token($1::uuid, $2::uuid)',
         [cancelledId, ids.guest]), '42501');
+    });
+
+    await t.test('account deletion clears shared IDs and authored content without harming another host', async () => {
+      const otherMeeting = '99999999-9999-4999-8999-999999999999';
+      const guestPoll = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const freshSession = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      const oldSession = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      await db.query(`insert into auth.sessions (id, user_id, created_at)
+        values ($1, $2, now()), ($3, $2, now() - interval '11 minutes')`,
+      [freshSession, ids.guest, oldSession]);
+      const fresh = await as(db, 'service_role', ids.guest,
+        'select public.account_deletion_session_is_fresh($1::uuid, $2::uuid) as allowed',
+        [ids.guest, freshSession]);
+      assert.equal(fresh.rows[0].allowed, true);
+      const old = await as(db, 'service_role', ids.guest,
+        'select public.account_deletion_session_is_fresh($1::uuid, $2::uuid) as allowed',
+        [ids.guest, oldSession]);
+      assert.equal(old.rows[0].allowed, false);
+      const wrongUser = await as(db, 'service_role', ids.outsider,
+        'select public.account_deletion_session_is_fresh($1::uuid, $2::uuid) as allowed',
+        [ids.outsider, freshSession]);
+      assert.equal(wrongUser.rows[0].allowed, false);
+      await rejectsSqlState(as(db, 'authenticated', ids.guest,
+        'select public.account_deletion_session_is_fresh($1::uuid, $2::uuid)',
+        [ids.guest, freshSession]), '42501');
+      await db.query(`insert into public.meetings (id, host_id, title, starts_at, room_code)
+        values ($1, $2, 'Outsider meeting', now(), 'OUT123')`, [otherMeeting, ids.outsider]);
+      await as(db, 'service_role', ids.guest,
+        'select public.join_meeting_for_token($1::uuid, $2::uuid)', [otherMeeting, ids.guest]);
+      await as(db, 'authenticated', ids.guest,
+        `insert into public.meeting_messages (meeting_id, sender_id, sender_name, text)
+          values ($1, $2, 'Guest private name', 'Guest content')`, [otherMeeting, ids.guest]);
+      await as(db, 'authenticated', ids.guest,
+        `insert into public.polls (id, meeting_id, question, created_by, options)
+          values ($1, $2, 'Guest question?', $3, $4::jsonb)`,
+        [guestPoll, otherMeeting, ids.guest, pollOptions]);
+      const dm = await as(db, 'authenticated', ids.guest,
+        'select public.get_or_create_dm_conversation($1::uuid) as id', [ids.outsider]);
+      const dmId = dm.rows[0].id;
+      await as(db, 'authenticated', ids.guest,
+        `insert into public.conversation_messages
+          (conversation_id, sender_id, sender_name, text)
+          values ($1, $2, 'Guest private name', 'Guest DM')`, [dmId, ids.guest]);
+      await db.query(`insert into storage.objects (bucket_id, name, owner_id)
+        values ('chat-uploads', $1, $2), ('profile-avatars', $3, $2)`,
+      [`${dmId}/shared.jpg`, ids.guest, `${ids.guest}/avatar.jpg`]);
+      await rejectsSqlState(as(db, 'authenticated', ids.guest,
+        'select * from public.account_deletion_storage_objects($1::uuid, 100)',
+        [ids.guest]), '42501');
+      const inventory = await as(db, 'service_role', ids.guest,
+        'select bucket_id, name from public.account_deletion_storage_objects($1::uuid, 100)',
+        [ids.guest]);
+      assert.deepEqual(inventory.rows, [
+        { bucket_id: 'chat-uploads', name: `${dmId}/shared.jpg` },
+        { bucket_id: 'profile-avatars', name: `${ids.guest}/avatar.jpg` },
+      ]);
+      await as(db, 'service_role', ids.guest,
+        'insert into public.account_deletion_requests (user_id) values ($1)', [ids.guest]);
+      await rejectsSqlState(as(db, 'authenticated', ids.guest,
+        'select public.get_or_create_dm_conversation($1::uuid)', [ids.outsider]), '42501');
+      await rejectsSqlState(as(db, 'authenticated', ids.outsider,
+        'select public.get_or_create_dm_conversation($1::uuid)', [ids.guest]), '42501');
+      await rejectsSqlState(as(db, 'authenticated', ids.outsider,
+        `insert into storage.objects (bucket_id, name, owner_id)
+          values ('chat-uploads', $1, $2)`, [`${dmId}/late.jpg`, ids.outsider]), '42501');
+      // Hosted deletion removes bytes through the Storage API before auth deletion.
+      // This local shim has metadata only, so it simulates that completed API step.
+      await db.query('delete from storage.objects where owner_id = $1', [ids.guest]);
+      await db.query('delete from auth.users where id = $1', [ids.guest]);
+      const survivingMeeting = await db.query('select id from public.meetings where id = $1', [otherMeeting]);
+      assert.equal(survivingMeeting.rows.length, 1);
+      for (const [table, column] of [
+        ['users', 'id'], ['meeting_participants', 'user_id'],
+        ['meeting_messages', 'sender_id'], ['polls', 'created_by'],
+        ['conversation_messages', 'sender_id'], ['poll_votes', 'voter_id'],
+      ]) {
+        const result = await db.query(`select 1 from public.${table} where ${column} = $1`, [ids.guest]);
+        assert.equal(result.rows.length, 0, `${table}.${column} retained the deleted user`);
+      }
+      const staleConversation = await db.query('select id from public.conversations where id = $1', [dmId]);
+      assert.equal(staleConversation.rows.length, 0);
+      await rejectsSqlState(as(db, 'authenticated', ids.guest,
+        'select public.get_or_create_dm_conversation($1::uuid)', [ids.outsider]), '42501');
+
+      await as(db, 'authenticated', ids.outsider,
+        `insert into public.polls (meeting_id, question, created_by, options)
+          values ($1, 'Host question?', $2, $3::jsonb)`, [otherMeeting, ids.outsider, pollOptions]);
+      await as(db, 'service_role', ids.host,
+        'select public.join_meeting_for_token($1::uuid, $2::uuid)', [otherMeeting, ids.host]);
+      await as(db, 'service_role', ids.outsider,
+        'insert into public.account_deletion_requests (user_id) values ($1)', [ids.outsider]);
+      await rejectsSqlState(as(db, 'authenticated', ids.host,
+        `insert into storage.objects (bucket_id, name, owner_id)
+          values ('chat-uploads', $1, $2)`, [`${otherMeeting}/late.jpg`, ids.host]), '42501');
+      await as(db, 'authenticated', ids.host,
+        'select public.leave_meeting($1::uuid)', [otherMeeting]);
+      const leftHostClosingMeeting = await db.query(`select left_at from public.meeting_participants
+        where meeting_id = $1 and user_id = $2`, [otherMeeting, ids.host]);
+      assert.ok(leftHostClosingMeeting.rows[0].left_at);
+      await db.query('delete from auth.users where id = $1', [ids.outsider]);
+      const removedHostedMeeting = await db.query('select id from public.meetings where id = $1', [otherMeeting]);
+      assert.equal(removedHostedMeeting.rows.length, 0);
+      const removedHostRequest = await db.query(
+        'select user_id from public.account_deletion_requests where user_id = $1', [ids.outsider]);
+      assert.equal(removedHostRequest.rows.length, 0);
     });
   } finally {
     await db.close();

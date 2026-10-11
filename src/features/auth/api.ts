@@ -1,6 +1,7 @@
 import * as AppleAuthentication from 'expo-apple-authentication';
 
 import { supabase } from '@/lib/supabase';
+import { requestExistingAccountCode, verifyExistingAccountCode } from './recovery';
 
 export class AuthNotConfiguredError extends Error {
   constructor() {
@@ -26,6 +27,16 @@ export async function verifySignInCode(email: string, code: string) {
   const client = requireAuth();
   const { error } = await client.auth.verifyOtp({ email, token: code, type: 'email' });
   if (error) throw error;
+}
+
+/** Recovery never creates a new user, even when the address is unknown. */
+export async function sendRecoveryCode(email: string) {
+  await requestExistingAccountCode(requireAuth().auth, email);
+}
+
+/** Exchanges an existing-account email code for a new authenticated session. */
+export async function verifyRecoveryCode(email: string, code: string) {
+  await verifyExistingAccountCode(requireAuth().auth, email, code);
 }
 
 /** Native "Sign in with Apple" — exchanges the Apple identity token with Supabase. */

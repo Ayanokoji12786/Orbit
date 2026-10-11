@@ -1,5 +1,12 @@
 # Orbit development changelog
 
+## 2026-10-11 — account recovery, staged deletion and AI authorization
+
+- Added a recovery screen for an existing email-code account. Requests avoid creating new users, show the same account-neutral response for unknown addresses, and surface rate-limit or service failures honestly. Six recovery tests pass. Apple and Google users must sign in through their provider; hosted delivery and device behavior remain untested.
+- Added typed account-deletion confirmation and a ten-minute fresh sign-in requirement. A new service-role function records a tombstone, closes hosted meetings, removes LiveKit participants/rooms in bounded resumable steps, removes inventoried Storage objects through the Storage API, and deletes the Auth user last. SQL cleans up shared DMs and authored meeting content and blocks new writes during deletion. The client retries 202 responses and offers a retry path, but there is no server-side background continuation; a failed or interrupted deletion can remain pending.
+- Restricted the Groq function to active accounts and active meeting participants, replaced caller-provided meeting title with UUID, bounded history, and capped model output. The assistant still has no meeting audio/transcript context.
+- All 13 migrations apply in isolated PGlite PostgreSQL 17.5 and `npm test` passes 20/20. TypeScript, lint, web export (57 static routes), iOS JavaScript export, and diff checks pass. Actual hosted Auth/Storage/Edge/LiveKit/Groq, authenticated native journeys and two-account behavior remain unverified. No migration or function was deployed.
+
 ## 2026-10-10 — meeting lifecycle, profiles, reminders and SQL tests (`23583ed`)
 
 - Added host-authorized meeting end/cancel, participant leave, expiring membership leases, LiveKit presence renewal, short-lived tokens, and terminal-room checks. Chat, polls, votes, whiteboard and meeting uploads now require active membership; a PostgreSQL test exposed and helped fix guest meeting-image upload denial.

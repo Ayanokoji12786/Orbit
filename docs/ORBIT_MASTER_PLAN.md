@@ -1,6 +1,6 @@
 # Orbit completion plan
 
-Updated 2026-10-10 (Asia/Kolkata). Authoritative work branch: `codex/orbit-completion` in `Ayanokoji12786/Orbit`. Do not run concurrent writers in this checkout. A future run must read this file and `ORBIT_PROGRESS.md`, compare them with Git and source, then take the next unfinished task. The plan is an inventory of work, not a claim of completion.
+Updated 2026-10-11 (Asia/Kolkata). Authoritative work branch: `codex/orbit-completion` in `Ayanokoji12786/Orbit`. Do not run concurrent writers in this checkout. A future run must read this file and `ORBIT_PROGRESS.md`, compare them with Git and source, then take the next unfinished task. The plan is an inventory of work, not a claim of completion.
 
 ## Architecture and release rule
 
@@ -11,7 +11,7 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 ## Milestones
 
 1. **Security and truthful controls:** local quota, password, membership, and Storage changes now pass PGlite PostgreSQL checks; isolated hosted Supabase/LiveKit verification remains.
-2. **Accounts and contact flows:** profile edit/private avatar and contact removal are implemented locally; recovery, deletion, session states, and two-account authorization remain.
+2. **Accounts and contact flows:** profile edit/private avatar, contact removal, existing-account email OTP recovery, and staged account deletion are implemented locally; hosted Auth/Storage/Edge behavior, deletion retry completion, provider journeys, session states, and two-account authorization remain.
 3. **Messaging and meetings:** lifecycle and host end/cancel are implemented locally; attachments, offline/reconnect, host moderation, reliable call recovery, and multi-user tests remain.
 4. **Collaboration:** secure synchronized whiteboard, reactions, hand state, polls, screen sharing, real-time tests.
 5. **Notifications and AI:** local rescheduling/cancellation and reminder navigation are implemented; cross-device reminder reconciliation and consent-gated transcription, notes, summaries, action items, translation, transcript search, and context assistance remain.
@@ -22,7 +22,7 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 | Area | Current classification | Evidence / gap |
 | --- | --- | --- |
 | Email OTP, Google, Apple, session persistence, sign-out | Implemented, unverified | Auth API and screens exist; provider and device checks pending. |
-| Account recovery, deletion, profile edit | Partial | Name/bio/private avatar edit works in code; account recovery/deletion and hosted/device verification remain. |
+| Account recovery, deletion, profile edit | Partial, local implementation | Name/bio/private avatar edit; existing-account email OTP recovery with generic unknown-address response; typed DELETE, ten-minute fresh-session gate, tombstone, bounded LiveKit/Storage cleanup and Auth deletion. No hosted/device deletion or recovery journey; interrupted deletion requires user retry. |
 | Contacts and direct chat | Partially implemented | Email lookup, add/remove, favorite, DM and Realtime code exist; reconnect and multi-user tests absent. |
 | Image/file attachments | Partial | Private chat images and avatars have signed reads; general files and upload lifecycle are absent. |
 | Meeting creation/join/password/LiveKit | Partial | Host end/cancel, leave, 5-minute access leases, 60-second tokens, password controls, and token revocation code exist; hosted/device behavior needs validation and deployment. |
@@ -31,9 +31,13 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 | Whiteboard | Implemented locally, unverified | Normalized participant-scoped events, replay, and host-only clear pass isolated SQL tests; deployment/two-device sync pending. Latest 500 changes retained; web is a local preview. |
 | Screen sharing and participant controls | Partial | Native share attempt exists; no host moderation; web preview now labels native-only controls. |
 | Reminders and notifications | Partial | Local scheduling, replacement/cancellation, permission handling, and tap navigation exist; device tests, cross-device reconciliation, and in-app inbox remain. |
-| AI assistant | Implemented, unverified | `groq-chat` validates auth/input, rate-limits and proxies Groq; key and end-to-end behavior unverified. It has no meeting audio/transcript context. |
+| AI assistant | Implemented, unverified | `groq-chat` now checks active account and meeting membership, requires meeting UUID, bounds history and output, rate-limits and proxies Groq. Key and end-to-end behavior remain unverified. It has no meeting audio/transcript context. |
 | Summaries, notes, action items, captions, transcription, translation, search | Missing / unavailable | Fabricated home summary and recording content removed; consent and processing pipeline absent. |
-| Settings and accessibility | Partial / UI-only | Appearance and accessibility screens exist; privacy and devices are stubs; complete route review pending. |
+| Settings and accessibility | Partial | Appearance and accessibility screens exist; Privacy now exposes deletion, while Devices remains a stub. Complete route review pending. |
+
+## Account deletion release gates
+
+The local flow first requires a recently started sign-in session, then records a deletion request before closing write paths. It ends hosted meetings, disconnects LiveKit identities, removes Storage files via the Storage API, and deletes the Auth user last. Repeated calls resume bounded work. The client retries 202 responses within a tap, but there is **no background worker**: a closed app, failed function, or large library leaves a pending request until the user retries. Durable server-side continuation is the next implementation priority. Hosted tests must verify `auth.sessions` access, LiveKit and Storage behavior, Auth cascade, a lost final response, service interruption/retry, and large room/file pagination before this is called reliable. Recheck surviving read access from a still-valid JWT and already-signed URLs. Confirm user-visible handling on iOS, Android, and web.
 
 ## Continuation
 

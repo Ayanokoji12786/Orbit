@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { TextInput, View } from 'react-native';
+import { ScrollView, TextInput, View } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -62,7 +62,14 @@ export default function SignIn() {
 
   return (
     <GradientBackground>
-      <View style={{ flex: 1, paddingTop: insets.top + spacing.xxl, paddingHorizontal: spacing.xl }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingTop: insets.top + spacing.xxl,
+          paddingBottom: insets.bottom + spacing.xl,
+          paddingHorizontal: spacing.xl,
+        }}>
         <View
           style={{
             width: 64,
@@ -161,10 +168,19 @@ export default function SignIn() {
           />
         </View>
 
+        <View style={{ alignItems: 'center', marginTop: spacing.sm }}>
+          <Button
+            label="Recover account"
+            variant="ghost"
+            fullWidth={false}
+            onPress={() => router.push('/(auth)/recover-account')}
+          />
+        </View>
+
         <AppText variant="caption" color="textTertiary" style={{ marginTop: spacing.xl, textAlign: 'center' }}>
           By continuing, you agree to Orbit's Terms of Service and Privacy Policy.
         </AppText>
-      </View>
+      </ScrollView>
     </GradientBackground>
   );
 }
