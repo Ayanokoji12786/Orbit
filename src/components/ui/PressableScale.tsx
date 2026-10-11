@@ -68,6 +68,7 @@ export function PressableScale({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: Boolean(disabled) }}
+      aria-disabled={Boolean(disabled)}
       style={[{ opacity: disabled ? 0.5 : 1 }, style, animatedStyle]}>
       {children}
     </AnimatedPressable>
