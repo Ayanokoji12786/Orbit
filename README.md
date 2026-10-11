@@ -26,8 +26,21 @@ Before deploying, add `EXPO_PUBLIC_SUPABASE_URL` and
 `EXPO_PUBLIC_SUPABASE_ANON_KEY` in Vercel's project environment settings. These are
 public client configuration; never use a Supabase service-role key. Redeploy after
 changing these values because Expo embeds them during the build.
+The `EXPO_PUBLIC_SUPABASE_ANON_KEY` variable also accepts Supabase's newer
+`sb_publishable_` keys. Secret keys belong only on the backend.
 Local builds after changing `.env.local` should also use `npx expo export --platform
 web --clear` to prevent Metro from reusing a bundle with old client configuration.
+
+For a direct upload of an already exported site using the Vercel CLI:
+
+```bash
+npx expo export --platform web --max-workers 2 --clear
+node scripts/prepare-web-deploy.cjs
+vercel dist --prod
+```
+
+The preparation step preserves Expo's fonts and icons under `assets/node_modules`,
+which Vercel's default upload exclusions would otherwise omit.
 
 Complete the Supabase migrations and LiveKit Edge Function setup below. Vercel hosts
 the browser interface; LiveKit carries meeting media and Supabase handles accounts,
