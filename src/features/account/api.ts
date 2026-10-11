@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
-type DeleteResponse = { deleted?: boolean; remaining?: boolean; error?: string };
+type DeleteResponse = { deleted?: boolean; remaining?: boolean; retryAfterMs?: number; error?: string };
 
 const safeServerErrors = new Set([
   'Sign in required.',
@@ -53,6 +53,7 @@ export async function deleteOwnAccount(): Promise<DeleteResult> {
   }
 
   let deleted = false;
+  let sawPending = false;
   for (let attempt = 0; attempt < 20; attempt++) {
     const { data, error } = await client.functions.invoke<DeleteResponse>('delete-account', {
       body: { confirmation: 'DELETE' },
@@ -60,6 +61,11 @@ export async function deleteOwnAccount(): Promise<DeleteResult> {
     if (error) {
       const context = (error as { context?: unknown }).context;
       if (context instanceof Response) {
+        if (sawPending && [401, 404].includes(context.status)) {
+          // A scheduled worker may have removed Auth after our previous 202.
+          // Clear this device, but keep the result explicitly unverified.
+          return { verifiedDeleted: false, ...await clearThisDevice(client) };
+        }
         const payload = await context.clone().json().catch(() => null) as DeleteResponse | null;
         if (payload?.error && safeServerErrors.has(payload.error)) throw new Error(payload.error);
         if (context.status === 403) {
@@ -73,6 +79,13 @@ export async function deleteOwnAccount(): Promise<DeleteResult> {
       break;
     }
     if (data?.remaining !== true) throw new Error(data?.error ?? 'Unexpected account deletion response.');
+    sawPending = true;
+    if (attempt < 19) {
+      const retryAfterMs = typeof data.retryAfterMs === 'number' && Number.isFinite(data.retryAfterMs)
+        ? Math.min(5000, Math.max(250, data.retryAfterMs))
+        : 500;
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+    }
   }
   if (!deleted) throw new Error('A large file library needs more cleanup. Tap Delete account again to continue.');
 

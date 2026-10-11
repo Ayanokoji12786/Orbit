@@ -382,6 +382,12 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
+# The scheduled worker authenticates its short-lived HMAC trigger in its own
+# handler. No public caller can choose a user ID; only service-role claims on
+# pre-existing deletion requests are processed.
+[functions.delete-account-worker]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 

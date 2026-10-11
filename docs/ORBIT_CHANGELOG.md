@@ -1,5 +1,11 @@
 # Orbit development changelog
 
+## 2026-10-11 — leased account-deletion continuation
+
+- Added service-only, lease-fenced deletion claims and durable checkpoint/retry state. The user endpoint and signed worker share bounded LiveKit, Storage and Auth cleanup; the worker selects one due tombstone and cannot accept a caller-specified account. The client handles a worker-completed Auth deletion during 202 polling as unverified local sign-out rather than claiming confirmed deletion.
+- Added a Vault-backed, secret-free Cron installer and [deployment runbook](ORBIT_ACCOUNT_DELETION_WORKER.md). The Cron job is **not installed**; an isolated Orbit Supabase project, secrets, and hosted verification are required before closed-app completion can be claimed.
+- All 14 migrations apply in PGlite PostgreSQL 17.5; `npm test` passes 22/22 including claim fencing/backoff and HMAC trigger checks. TypeScript, lint, web export (57 routes), iOS JavaScript export and diff checks pass. Deno Edge, hosted Cron/Vault/Auth/Storage/LiveKit, authenticated native behavior and two-account checks remain unverified.
+
 ## 2026-10-11 — account recovery, staged deletion and AI authorization
 
 - Added a recovery screen for an existing email-code account. Requests avoid creating new users, show the same account-neutral response for unknown addresses, and surface rate-limit or service failures honestly. Six recovery tests pass. Apple and Google users must sign in through their provider; hosted delivery and device behavior remain untested.

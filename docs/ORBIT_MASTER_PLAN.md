@@ -11,7 +11,7 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 ## Milestones
 
 1. **Security and truthful controls:** local quota, password, membership, and Storage changes now pass PGlite PostgreSQL checks; isolated hosted Supabase/LiveKit verification remains.
-2. **Accounts and contact flows:** profile edit/private avatar, contact removal, existing-account email OTP recovery, and staged account deletion are implemented locally; hosted Auth/Storage/Edge behavior, deletion retry completion, provider journeys, session states, and two-account authorization remain.
+2. **Accounts and contact flows:** profile edit/private avatar, contact removal, existing-account email OTP recovery, and staged account deletion with a locally implemented scheduled continuation path; hosted worker installation, Auth/Storage/Edge behavior, provider journeys, session states, and two-account authorization remain.
 3. **Messaging and meetings:** lifecycle and host end/cancel are implemented locally; attachments, offline/reconnect, host moderation, reliable call recovery, and multi-user tests remain.
 4. **Collaboration:** secure synchronized whiteboard, reactions, hand state, polls, screen sharing, real-time tests.
 5. **Notifications and AI:** local rescheduling/cancellation and reminder navigation are implemented; cross-device reminder reconciliation and consent-gated transcription, notes, summaries, action items, translation, transcript search, and context assistance remain.
@@ -22,7 +22,7 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 | Area | Current classification | Evidence / gap |
 | --- | --- | --- |
 | Email OTP, Google, Apple, session persistence, sign-out | Implemented, unverified | Auth API and screens exist; provider and device checks pending. |
-| Account recovery, deletion, profile edit | Partial, local implementation | Name/bio/private avatar edit; existing-account email OTP recovery with generic unknown-address response; typed DELETE, ten-minute fresh-session gate, tombstone, bounded LiveKit/Storage cleanup and Auth deletion. No hosted/device deletion or recovery journey; interrupted deletion requires user retry. |
+| Account recovery, deletion, profile edit | Partial, local implementation | Name/bio/private avatar edit; existing-account email OTP recovery with generic unknown-address response; typed DELETE, ten-minute fresh-session gate, tombstone, bounded LiveKit/Storage cleanup and Auth deletion. Service-only leased worker and secret-free Cron installer are prepared, but no hosted schedule or device deletion/recovery journey exists. |
 | Contacts and direct chat | Partially implemented | Email lookup, add/remove, favorite, DM and Realtime code exist; reconnect and multi-user tests absent. |
 | Image/file attachments | Partial | Private chat images and avatars have signed reads; general files and upload lifecycle are absent. |
 | Meeting creation/join/password/LiveKit | Partial | Host end/cancel, leave, 5-minute access leases, 60-second tokens, password controls, and token revocation code exist; hosted/device behavior needs validation and deployment. |
@@ -37,7 +37,7 @@ Follow the exact [Expo SDK 57 reference](https://docs.expo.dev/versions/v57.0.0/
 
 ## Account deletion release gates
 
-The local flow first requires a recently started sign-in session, then records a deletion request before closing write paths. It ends hosted meetings, disconnects LiveKit identities, removes Storage files via the Storage API, and deletes the Auth user last. Repeated calls resume bounded work. The client retries 202 responses within a tap, but there is **no background worker**: a closed app, failed function, or large library leaves a pending request until the user retries. Durable server-side continuation is the next implementation priority. Hosted tests must verify `auth.sessions` access, LiveKit and Storage behavior, Auth cascade, a lost final response, service interruption/retry, and large room/file pagination before this is called reliable. Recheck surviving read access from a still-valid JWT and already-signed URLs. Confirm user-visible handling on iOS, Android, and web.
+The local flow first requires a recently started sign-in session, then records a deletion request before closing write paths. It ends hosted meetings, disconnects LiveKit identities, removes Storage files via the Storage API, and deletes the Auth user last. Repeated calls resume bounded work. The user endpoint and scheduled worker use one service-only leased claim path; the worker code and [Cron installation runbook](ORBIT_ACCOUNT_DELETION_WORKER.md) are ready, but **no schedule is installed**. Until an isolated Orbit project is configured and tested, a closed app, failed function, or large library can leave a request pending without further user action. Hosted tests must verify `auth.sessions` access, Vault/Cron/function routing, LiveKit and Storage behavior, Auth cascade, a lost final response, service interruption/retry, and large room/file pagination before this is called reliable. Recheck surviving read access from a still-valid JWT and already-signed URLs. Confirm user-visible handling on iOS, Android, and web.
 
 ## Continuation
 

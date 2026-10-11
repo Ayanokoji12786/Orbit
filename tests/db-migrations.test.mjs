@@ -550,6 +550,146 @@ test('Supabase migrations apply and enforce meeting authorization', async (t) =>
         'select user_id from public.account_deletion_requests where user_id = $1', [ids.outsider]);
       assert.equal(removedHostRequest.rows.length, 0);
     });
+
+    await t.test('deletion worker claims are exclusive, fenced, and retried with backoff', async () => {
+      const firstUser = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      const secondUser = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      const memberCursor = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+      const wrongToken = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      await db.query(`insert into auth.users (id, email, raw_user_meta_data)
+        values ($1, 'worker-one@orbit.test', '{}'::jsonb),
+               ($2, 'worker-two@orbit.test', '{}'::jsonb)`, [firstUser, secondUser]);
+      await db.query('insert into public.account_deletion_requests (user_id) values ($1)', [firstUser]);
+
+      for (const role of ['anon', 'authenticated']) {
+        await rejectsSqlState(as(db, role, firstUser,
+          'select * from public.account_deletion_claim($1::uuid, 600)', [firstUser]), '42501');
+        await rejectsSqlState(as(db, role, firstUser,
+          'select public.account_deletion_finish($1::uuid, $2::uuid, false)',
+          [firstUser, wrongToken]), '42501');
+        await rejectsSqlState(as(db, role, firstUser,
+          "select public.account_deletion_checkpoint($1::uuid, $2::uuid, 'renew')",
+          [firstUser, wrongToken]), '42501');
+      }
+
+      const claimed = await as(db, 'service_role', firstUser,
+        'select * from public.account_deletion_claim($1::uuid, 60)', [firstUser]);
+      assert.equal(claimed.rows.length, 1);
+      assert.equal(claimed.rows[0].user_id, firstUser);
+      const originalToken = claimed.rows[0].claim_token;
+      assert.match(originalToken, /^[0-9a-f-]{36}$/i);
+      await rejectsSqlState(as(db, 'service_role', firstUser,
+        'select public.account_deletion_checkpoint($1::uuid, $2::uuid, null)',
+        [firstUser, originalToken]), '22023');
+      await rejectsSqlState(as(db, 'service_role', firstUser,
+        "select public.account_deletion_checkpoint($1::uuid, $2::uuid, 'hosted_member')",
+        [firstUser, originalToken]), '22023');
+      const duplicate = await as(db, 'service_role', firstUser,
+        'select * from public.account_deletion_claim($1::uuid, 60)', [firstUser]);
+      assert.equal(duplicate.rows.length, 0, 'an active lease cannot be claimed twice');
+
+      const badCheckpoint = await as(db, 'service_role', firstUser,
+        "select public.account_deletion_checkpoint($1::uuid, $2::uuid, 'hosted_member', $3::uuid) as updated",
+        [firstUser, wrongToken, memberCursor]);
+      assert.equal(badCheckpoint.rows[0].updated, false);
+      const validCheckpoint = await as(db, 'service_role', firstUser,
+        "select public.account_deletion_checkpoint($1::uuid, $2::uuid, 'hosted_member', $3::uuid) as updated",
+        [firstUser, originalToken, memberCursor]);
+      assert.equal(validCheckpoint.rows[0].updated, true);
+      const saved = await db.query('select hosted_member_cursor from public.account_deletion_requests where user_id = $1',
+        [firstUser]);
+      assert.equal(saved.rows[0].hosted_member_cursor, memberCursor);
+
+      // Move the clock-relative lease in the test DB; no wall-clock sleep or
+      // hosted scheduler is involved. The old token must lose every write.
+      await db.query("update public.account_deletion_requests set lease_until = now() - interval '1 second' where user_id = $1",
+        [firstUser]);
+      const reclaimed = await as(db, 'service_role', firstUser,
+        'select * from public.account_deletion_claim($1::uuid, 60)', [firstUser]);
+      assert.equal(reclaimed.rows.length, 1);
+      const newToken = reclaimed.rows[0].claim_token;
+      assert.notEqual(newToken, originalToken);
+      const staleFinish = await as(db, 'service_role', firstUser,
+        'select public.account_deletion_finish($1::uuid, $2::uuid, true) as finished',
+        [firstUser, originalToken]);
+      assert.equal(staleFinish.rows[0].finished, false);
+      const staleCheckpoint = await as(db, 'service_role', firstUser,
+        "select public.account_deletion_checkpoint($1::uuid, $2::uuid, 'hosted_done') as updated",
+        [firstUser, originalToken]);
+      assert.equal(staleCheckpoint.rows[0].updated, false);
+      const stateAfterStale = await db.query(
+        'select claim_token, hosted_rooms_done from public.account_deletion_requests where user_id = $1',
+        [firstUser]);
+      assert.equal(stateAfterStale.rows[0].claim_token, newToken);
+      assert.equal(stateAfterStale.rows[0].hosted_rooms_done, false);
+
+      const partial = await as(db, 'service_role', firstUser,
+        'select public.account_deletion_finish($1::uuid, $2::uuid, false) as finished',
+        [firstUser, newToken]);
+      assert.equal(partial.rows[0].finished, true);
+      const partialState = await db.query(`select claim_token, lease_until, retry_count,
+        extract(epoch from next_attempt_at - now()) as delay_seconds
+        from public.account_deletion_requests where user_id = $1`, [firstUser]);
+      assert.equal(partialState.rows[0].claim_token, null);
+      assert.equal(partialState.rows[0].lease_until, null);
+      assert.equal(partialState.rows[0].retry_count, 0);
+      assert.ok(Number(partialState.rows[0].delay_seconds) > 0);
+      const notDue = await as(db, 'service_role', firstUser,
+        'select * from public.account_deletion_claim()', []);
+      assert.equal(notDue.rows.length, 0, 'a partial attempt should wait before the next worker sweep');
+
+      // A user-triggered retry bypasses the schedule, but never an active lease.
+      const requestedRetry = await as(db, 'service_role', firstUser,
+        'select * from public.account_deletion_claim($1::uuid, 60)', [firstUser]);
+      assert.equal(requestedRetry.rows.length, 1);
+      const failed = await as(db, 'service_role', firstUser,
+        'select public.account_deletion_finish($1::uuid, $2::uuid, true) as finished',
+        [firstUser, requestedRetry.rows[0].claim_token]);
+      assert.equal(failed.rows[0].finished, true);
+      const firstFailure = await db.query(`select retry_count,
+        extract(epoch from next_attempt_at - now()) as delay_seconds
+        from public.account_deletion_requests where user_id = $1`, [firstUser]);
+      assert.equal(firstFailure.rows[0].retry_count, 1);
+      assert.ok(Number(firstFailure.rows[0].delay_seconds) > 50);
+
+      await db.query('insert into public.account_deletion_requests (user_id) values ($1)', [secondUser]);
+      const nextDue = await as(db, 'service_role', secondUser,
+        'select * from public.account_deletion_claim()', []);
+      assert.equal(nextDue.rows.length, 1);
+      assert.equal(nextDue.rows[0].user_id, secondUser);
+      const noneDue = await as(db, 'service_role', secondUser,
+        'select * from public.account_deletion_claim()', []);
+      assert.equal(noneDue.rows.length, 0, 'leased and backed-off requests must not be claimed');
+
+      await db.query("update public.account_deletion_requests set next_attempt_at = now() - interval '1 second' where user_id = $1",
+        [firstUser]);
+      const secondAttempt = await as(db, 'service_role', firstUser,
+        'select * from public.account_deletion_claim()', []);
+      assert.equal(secondAttempt.rows[0].user_id, firstUser);
+      await as(db, 'service_role', firstUser,
+        'select public.account_deletion_finish($1::uuid, $2::uuid, true)',
+        [firstUser, secondAttempt.rows[0].claim_token]);
+      const secondFailure = await db.query(`select retry_count,
+        extract(epoch from next_attempt_at - now()) as delay_seconds
+        from public.account_deletion_requests where user_id = $1`, [firstUser]);
+      assert.equal(secondFailure.rows[0].retry_count, 2);
+      assert.ok(Number(secondFailure.rows[0].delay_seconds) >
+        Number(firstFailure.rows[0].delay_seconds) + 50,
+      'repeated failures should increase the retry delay');
+
+      await as(db, 'service_role', secondUser,
+        'select public.account_deletion_finish($1::uuid, $2::uuid, false)',
+        [secondUser, nextDue.rows[0].claim_token]);
+      const nullLeaseInput = await as(db, 'service_role', secondUser,
+        'select * from public.account_deletion_claim($1::uuid, null)', [secondUser]);
+      assert.equal(nullLeaseInput.rows.length, 1);
+      const lease = await db.query(`select extract(epoch from lease_until - now()) as seconds
+        from public.account_deletion_requests where user_id = $1`, [secondUser]);
+      assert.ok(Number(lease.rows[0].seconds) > 50, 'a NULL lease duration must still create a live lease');
+      const duplicateNullLease = await as(db, 'service_role', secondUser,
+        'select * from public.account_deletion_claim($1::uuid, null)', [secondUser]);
+      assert.equal(duplicateNullLease.rows.length, 0);
+    });
   } finally {
     await db.close();
   }
